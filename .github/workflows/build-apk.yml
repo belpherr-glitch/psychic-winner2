@@ -47,31 +47,25 @@ jobs:
           unzip -q -o -j /tmp/ltw.aar 'jni/arm64-v8a/*.so' -d "$D"
           ls -la "$D"
 
-      - name: Baixar JRE 21 para Android (OpenJDK, GPLv2 + Classpath Exception)
-        uses: dawidd6/action-download-artifact@v9
-        with:
-          repo: PojavLauncherTeam/android-openjdk-build-multiarch
-          workflow: build.yml
-          branch: buildjre17-21
-          name: jre21-pojav
-          workflow_conclusion: success
-          path: /tmp/jre21
-
-      - name: Empacotar JRE no APK
+      - name: JRE 21 para Android (OpenJDK, GPLv2 + Classpath Exception)
         run: |
           set -euo pipefail
-          ls -la /tmp/jre21
-          X=/tmp/jre21-x; mkdir -p "$X"
-          for f in /tmp/jre21/*.tar.xz; do
-            case "$(basename "$f")" in
-              universal*|*arm64*|*aarch64*) echo "extraindo $f"; tar -xJf "$f" -C "$X" ;;
-            esac
+          BASE=https://github.com/AngelAuraMC/angelauramc-openjdk-build/releases/download/download_jre21
+          for arch in arm64 aarch64; do
+            curl -fsSL -o /tmp/jre21.tar.xz "$BASE/jre21-android-$arch.tar.xz" && break || true
           done
-          find "$X" -name 'libjli.so' -o -name 'libjvm.so' | head
-          test -f "$X/lib/libjli.so"
-          test -f "$X/lib/server/libjvm.so"
+          ls -la /tmp/jre21.tar.xz
+          X=/tmp/jre21-x; mkdir -p "$X"
+          tar -xJf /tmp/jre21.tar.xz -C "$X"
+          JLI=$(find "$X" -name libjli.so | head -1)
+          test -n "$JLI" || { echo "libjli.so não encontrada"; find "$X" -maxdepth 3 | head -50; exit 1; }
+          HOME_DIR=$(dirname "$(dirname "$JLI")")
+          [ "$(basename "$(dirname "$JLI")")" = jli ] && HOME_DIR=$(dirname "$HOME_DIR")
+          echo "JAVA_HOME no pacote: ${HOME_DIR#$X}"
+          ls "$HOME_DIR" "$HOME_DIR/lib" | head -60
+          test -f "$HOME_DIR/lib/server/libjvm.so"
           A="$GITHUB_WORKSPACE/app/src/main/assets/runtime"; mkdir -p "$A"
-          (cd "$X" && zip -qr9 "$A/jre21.zip" .)
+          (cd "$HOME_DIR" && zip -qr9 "$A/jre21.zip" .)
           sha1sum "$A/jre21.zip" | cut -c1-12 > "$A/jre21.version"
           ls -la "$A"
 

@@ -13,7 +13,7 @@ baixados pelo CI:
 | OpenAL Soft (`libopenal.so`) | LGPL-2.0 | https://github.com/kcat/openal-soft (build do PojavLauncher) |
 | FreeType (`libfreetype.so`) | FreeType License | https://freetype.org (build do PojavLauncher) |
 | LTW (`libltw.so`) | LGPL-3.0 | https://github.com/PojavLauncherTeam/LTW |
-| OpenJDK 21 para Android | GPLv2 + Classpath Exception | https://github.com/PojavLauncherTeam/android-openjdk-build-multiarch |
+| OpenJDK 21 para Android | GPLv2 + Classpath Exception | https://github.com/AngelAuraMC/angelauramc-openjdk-build (release `download_jre21`) |
 
 As bibliotecas LGPL são carregadas dinamicamente e podem ser substituídas.
 Minecraft é marca da Mojang/Microsoft; o jogo não é distribuído, é baixado dos servidores oficiais.
