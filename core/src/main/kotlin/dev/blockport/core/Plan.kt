@@ -46,15 +46,23 @@ object Plan {
         val classpath = ArrayList<String>()
         val nativeJars = ArrayList<String>()
 
+        if (env.lwjglOverride) {
+            for (task in Lwjgl.downloads) {
+                tasks[task.dest] = task
+                classpath += task.dest
+            }
+        }
+
         for (lib in json.libraries) {
             if (!Rules.allows(lib.rules, env)) continue
+            if (env.lwjglOverride && Lwjgl.isLwjgl(lib)) continue
 
             // Artefato principal (vai no classpath).
             val artifact = lib.downloads?.artifact
             if (artifact != null || (lib.downloads == null && lib.natives == null)) {
                 val rel = "libraries/" + (artifact?.path ?: mavenPath(lib.name))
-                val url = artifact?.url ?: ((lib.url ?: "$LIBRARIES_URL/") .trimEnd('/') + "/" + mavenPath(lib.name))
-                if (!url.isNullOrBlank()) {
+                val url = artifact?.url ?: ((lib.url ?: "$LIBRARIES_URL/").trimEnd('/') + "/" + mavenPath(lib.name))
+                if (url.isNotBlank()) {
                     tasks.putIfAbsent(rel, DownloadTask(url, rel, artifact?.sha1, artifact?.size ?: 0))
                     if (rel !in classpath) classpath += rel
                 }

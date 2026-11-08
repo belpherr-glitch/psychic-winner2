@@ -90,6 +90,10 @@ class Installer(
 
     fun nativesDir(id: String) = File(root, "versions/$id/natives")
 
+    /** Garante que os arquivos existem (rápido: confia em arquivos com tamanho conhecido e correto). */
+    suspend fun ensure(tasks: List<DownloadTask>, onProgress: (InstallProgress) -> Unit = {}) =
+        downloadAll("Verificando", tasks, onProgress)
+
     private suspend fun downloadAll(
         phase: String,
         tasks: List<DownloadTask>,
@@ -108,9 +112,7 @@ class Installer(
 
     private suspend fun download(task: DownloadTask) = withContext(Dispatchers.IO) {
         val dest = File(root, task.dest)
-        if (dest.isFile && (task.sha1 == null || dest.sha1().equals(task.sha1, ignoreCase = true))) {
-            if (task.sha1 != null || dest.length() > 0) return@withContext
-        }
+        if (isValid(dest, task)) return@withContext
         dest.parentFile?.mkdirs()
         var lastError: Exception? = null
         repeat(3) { attempt ->
@@ -135,6 +137,17 @@ class Installer(
             }
         }
         throw IOException("Falha ao baixar ${task.url}", lastError)
+    }
+
+    /**
+     * Arquivo já baixado é válido se o tamanho bate (barato, evita hashear
+     * milhares de assets a cada inicialização); sem tamanho, usa SHA-1.
+     */
+    private fun isValid(dest: File, task: DownloadTask): Boolean {
+        if (!dest.isFile) return false
+        if (task.size > 0) return dest.length() == task.size
+        if (task.sha1 != null) return dest.sha1().equals(task.sha1, ignoreCase = true)
+        return dest.length() > 0
     }
 
     private suspend fun fetchText(url: String): String = withContext(Dispatchers.IO) {

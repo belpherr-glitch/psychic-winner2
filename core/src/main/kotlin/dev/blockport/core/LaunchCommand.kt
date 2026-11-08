@@ -40,6 +40,8 @@ object LaunchCommandBuilder {
         profile: PerformanceProfile,
         env: Environment,
         javaExecutable: String = "java",
+        /** Propriedades da plataforma (ex.: caminhos das natives no Android), antes dos args da versão. */
+        extraJvmArgs: List<String> = emptyList(),
     ): List<String> {
         val vars = mapOf(
             "auth_player_name" to ctx.playerName,
@@ -77,6 +79,7 @@ object LaunchCommandBuilder {
         val all = buildList {
             add(javaExecutable)
             addAll(profile.jvmArgs())
+            addAll(extraJvmArgs)
             addAll(jvm)
             add(version.mainClass)
             addAll(game)

@@ -8,6 +8,8 @@ data class Environment(
     val osName: String = "linux",
     val osArch: String = "arm64",
     val features: Map<String, Boolean> = emptyMap(),
+    /** Troca as libs org.lwjgl da versão pelo LWJGL fixado em [Lwjgl] (Android). */
+    val lwjglOverride: Boolean = false,
 )
 
 object Rules {

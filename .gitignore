@@ -6,3 +6,7 @@ local.properties
 .DS_Store
 *.apk
 .kotlin/
+# Baixados pelo CI (ver .github/workflows/build-apk.yml)
+app/src/main/jniLibs/
+app/src/main/assets/runtime/
+.cxx/

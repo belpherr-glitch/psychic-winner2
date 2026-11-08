@@ -16,6 +16,29 @@ android {
         versionName = "0.1.0"
         // Minecraft Java só roda em 64 bits.
         ndk { abiFilters += "arm64-v8a" }
+        externalNativeBuild {
+            cmake { arguments += listOf("-DANDROID_STL=none") }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // A JVM e o LWJGL fazem dlopen por caminho absoluto: as .so
+            // precisam existir extraídas em nativeLibraryDir.
+            useLegacyPackaging = true
+        }
+    }
+
+    androidResources {
+        // O zip da JRE já é comprimido.
+        noCompress += "zip"
     }
 
     buildTypes {

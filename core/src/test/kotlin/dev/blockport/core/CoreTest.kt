@@ -142,11 +142,49 @@ class CoreTest {
         assertTrue(low.heapMaxMb in 768..1600)
         assertTrue(mid.heapMaxMb > low.heapMaxMb)
         assertEquals(4096, high.heapMaxMb)
-        assertEquals(Renderer.GL4ES, low.renderer)
-        assertEquals(Renderer.ZINK, mid.renderer)
         assertContains(low.jvmFlags, "-XX:+UseSerialGC")
         assertContains(mid.jvmFlags, "-XX:+UseParallelGC")
         assertTrue(low.heapInitMb <= low.heapMaxMb)
+    }
+
+    @Test
+    fun lwjglOverrideReplacesVersionLwjgl() {
+        val r = Plan.resolve(version, Environment(lwjglOverride = true))
+        // nenhuma lib org/lwjgl da versão, só as fixadas 3.3.3
+        val lwjglPaths = r.classpath.filter { it.startsWith("libraries/org/lwjgl/") }
+        assertTrue(lwjglPaths.isNotEmpty())
+        assertTrue(lwjglPaths.all { "/${Lwjgl.VERSION}/" in it }, lwjglPaths.toString())
+        assertContains(r.classpath, "libraries/org/lwjgl/lwjgl-glfw/3.3.3/lwjgl-glfw-3.3.3.jar")
+        assertTrue(r.nativeJars.isEmpty(), "natives desktop não são usadas no Android")
+        assertContains(r.classpath, "libraries/com/mojang/logging/1.1.1/logging-1.1.1.jar")
+        assertEquals("versions/1.20.1/1.20.1.jar", r.classpath.last())
+        assertTrue(Lwjgl.downloads.all { it.sha1!!.length == 40 && it.size > 0 })
+    }
+
+    @Test
+    fun rendererAndCompat() {
+        assertEquals(Renderer.GL4ES, Renderer.select(8))
+        assertEquals(Renderer.LTW, Renderer.select(16))
+        assertEquals(Renderer.LTW, Renderer.select(21))
+
+        val modern = version.copy(
+            libraries = version.libraries + Library("org.lwjgl:lwjgl:3.3.1"),
+            javaVersion = JavaVersionInfo(majorVersion = 17),
+        )
+        assertEquals(null, Compat.check(modern))
+        assertTrue(Compat.check(modern.copy(javaVersion = JavaVersionInfo(majorVersion = 25)))!!.contains("Java 25"))
+        val legacy = VersionJson(id = "1.8.9", mainClass = "x", libraries = listOf(Library("org.lwjgl.lwjgl:lwjgl:2.9.4")))
+        assertTrue(Compat.check(legacy)!!.contains("LWJGL 2"))
+    }
+
+    @Test
+    fun extraJvmArgsGoBeforeVersionArgs() {
+        val ctx = LaunchContext("/g", "/a", "/l", "/n", listOf("/x.jar"), "Alex", "u", "t", versionName = "1.20.1", assetIndexName = "5")
+        val profile = PerformanceProfile.recommend(DeviceInfo(4096, 4, false))
+        val cmd = LaunchCommandBuilder.build(version, ctx, profile, Environment(), "/jre/bin/java", listOf("-Dorg.lwjgl.librarypath=/n"))
+        assertEquals("/jre/bin/java", cmd.first())
+        assertTrue(cmd.indexOf("-Dorg.lwjgl.librarypath=/n") < cmd.indexOf("-cp"))
+        assertTrue(cmd.indexOf("-Xmx${profile.heapMaxMb}M") < cmd.indexOf("-Dorg.lwjgl.librarypath=/n"))
     }
 
     @Test

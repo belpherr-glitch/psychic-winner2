@@ -22,6 +22,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -31,8 +33,10 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlin.math.roundToInt
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -57,7 +61,7 @@ fun LauncherApp(vm: LauncherViewModel) {
             AlertDialog(
                 onDismissRequest = { vm.launchReport = null },
                 confirmButton = { TextButton(onClick = { vm.launchReport = null }) { Text("OK") } },
-                title = { Text("Iniciar jogo") },
+                title = { Text("Não foi possível iniciar") },
                 text = {
                     SelectionContainer {
                         Text(report, Modifier.verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall)
@@ -113,11 +117,14 @@ private fun VersionRow(vm: LauncherViewModel, entry: VersionEntry) {
                 Text(entry.id, style = MaterialTheme.typography.titleMedium)
                 Text(entry.type, style = MaterialTheme.typography.bodySmall)
             }
+            val busyHere = vm.busy == entry.id
             if (isInstalled) {
-                Button(onClick = { vm.play(entry) }) { Text("Jogar") }
+                Button(onClick = { vm.play(entry) }, enabled = vm.busy == null) {
+                    Text(if (busyHere) "Iniciando…" else "Jogar")
+                }
             } else {
-                OutlinedButton(onClick = { vm.install(entry) }, enabled = vm.installing == null) {
-                    Text(if (vm.installing == entry.id) "Instalando…" else "Instalar")
+                OutlinedButton(onClick = { vm.install(entry) }, enabled = vm.busy == null) {
+                    Text(if (busyHere) "Instalando…" else "Instalar")
                 }
             }
         }
@@ -128,12 +135,54 @@ private fun VersionRow(vm: LauncherViewModel, entry: VersionEntry) {
 private fun PerformanceTab(vm: LauncherViewModel) {
     val d = vm.device
     val p = vm.profile
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val s = vm.settings
+    var showLog by remember { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         Text("Aparelho", style = MaterialTheme.typography.titleMedium)
         Text("RAM: ${d.totalRamMb} MB · Núcleos: ${d.cores} · Vulkan 1.1: ${if (d.supportsVulkan11) "sim" else "não"}")
-        Text("Perfil recomendado", style = MaterialTheme.typography.titleMedium)
+        Text(
+            if (vm.runtimeBundled) "Runtime Java 21: incluído no APK" else "Runtime Java: ausente neste APK",
+            color = if (vm.runtimeBundled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+        )
+
+        Text("Resolução de render: ${(s.renderScale * 100).roundToInt()}%", style = MaterialTheme.typography.titleMedium)
+        Slider(
+            value = s.renderScale,
+            onValueChange = { vm.updateSettings(s.copy(renderScale = (it * 20).roundToInt() / 20f)) },
+            valueRange = 0.25f..1f,
+        )
+        Text(
+            "Menos resolução = mais FPS e menos calor. 75% costuma ser imperceptível em telas Full HD.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Desempenho sustentado")
+                Text("Clock estável em sessões longas, sem picos e quedas por aquecimento.", style = MaterialTheme.typography.bodySmall)
+            }
+            Switch(checked = s.sustainedPerformance, onCheckedChange = { vm.updateSettings(s.copy(sustainedPerformance = it)) })
+        }
+
+        Text("Perfil JVM automático", style = MaterialTheme.typography.titleMedium)
         Text("Heap: ${p.heapInitMb}–${p.heapMaxMb} MB")
-        Text("Renderer: ${p.renderer.label}")
-        Text("Flags JVM: ${p.jvmArgs().joinToString(" ")}", style = MaterialTheme.typography.bodySmall)
+        Text("Renderer: escolhido pela versão (1.13–1.16: GL4ES; 1.17+: LTW)")
+        Text("Flags: ${p.jvmArgs().joinToString(" ")}", style = MaterialTheme.typography.bodySmall)
+
+        OutlinedButton(onClick = { showLog = true }) { Text("Ver último log do jogo") }
+    }
+    if (showLog) {
+        AlertDialog(
+            onDismissRequest = { showLog = false },
+            confirmButton = { TextButton(onClick = { showLog = false }) { Text("Fechar") } },
+            title = { Text("latestlog.txt") },
+            text = {
+                SelectionContainer {
+                    Text(vm.readLog(), Modifier.verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall)
+                }
+            },
+        )
     }
 }

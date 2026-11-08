@@ -5,6 +5,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  # Natives bionic de terceiros (LWJGL 3.3.3, gl4es, OpenAL Soft, FreeType),
+  # fixadas por commit. Ver NOTICE.md.
+  NATIVES_REPO: https://github.com/PojavLauncherTeam/PojavLauncher
+  NATIVES_COMMIT: b12ad048157b3aa255d078c235dd4571e1900309
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -18,8 +24,62 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Natives de terceiros (LWJGL, gl4es, OpenAL, FreeType)
+        run: |
+          set -euo pipefail
+          D="$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a"
+          mkdir -p "$D" /tmp/natives && cd /tmp/natives
+          git init -q
+          git remote add origin "$NATIVES_REPO"
+          git sparse-checkout set app_pojavlauncher/src/main/jniLibs/arm64-v8a
+          git fetch -q --depth 1 --filter=blob:none origin "$NATIVES_COMMIT"
+          git checkout -q FETCH_HEAD
+          for l in liblwjgl liblwjgl_opengl liblwjgl_stb liblwjgl_tinyfd libopenal libgl4es_114 libfreetype; do
+            cp "app_pojavlauncher/src/main/jniLibs/arm64-v8a/$l.so" "$D/"
+          done
+
+      - name: LTW (OpenGL 3.x sobre GLES 3, LGPL-3.0)
+        run: |
+          set -euo pipefail
+          D="$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a"
+          curl -fsSL -o /tmp/ltw.aar https://github.com/PojavLauncherTeam/LTW/releases/latest/download/ltw-release.aar
+          unzip -l /tmp/ltw.aar | grep '\.so$'
+          unzip -q -o -j /tmp/ltw.aar 'jni/arm64-v8a/*.so' -d "$D"
+          ls -la "$D"
+
+      - name: Baixar JRE 21 para Android (OpenJDK, GPLv2 + Classpath Exception)
+        uses: dawidd6/action-download-artifact@v9
+        with:
+          repo: PojavLauncherTeam/android-openjdk-build-multiarch
+          workflow: build.yml
+          branch: buildjre17-21
+          name: jre21-pojav
+          workflow_conclusion: success
+          path: /tmp/jre21
+
+      - name: Empacotar JRE no APK
+        run: |
+          set -euo pipefail
+          ls -la /tmp/jre21
+          X=/tmp/jre21-x; mkdir -p "$X"
+          for f in /tmp/jre21/*.tar.xz; do
+            case "$(basename "$f")" in
+              universal*|*arm64*|*aarch64*) echo "extraindo $f"; tar -xJf "$f" -C "$X" ;;
+            esac
+          done
+          find "$X" -name 'libjli.so' -o -name 'libjvm.so' | head
+          test -f "$X/lib/libjli.so"
+          test -f "$X/lib/server/libjvm.so"
+          A="$GITHUB_WORKSPACE/app/src/main/assets/runtime"; mkdir -p "$A"
+          (cd "$X" && zip -qr9 "$A/jre21.zip" .)
+          sha1sum "$A/jre21.zip" | cut -c1-12 > "$A/jre21.version"
+          ls -la "$A"
+
       - name: Testes do núcleo + APK debug
         run: ./gradlew :core:test :app:assembleDebug --stacktrace
+
+      - name: Verificar natives do APK
+        run: tools/check_natives.sh app/build/outputs/apk/debug/app-debug.apk
 
       - name: Publicar APK
         uses: actions/upload-artifact@v4
