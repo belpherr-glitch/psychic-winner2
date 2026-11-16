@@ -17,7 +17,7 @@
     <p class="tag">Monte um jogo, solte as IAs e veja elas aprenderem sozinhas.</p>
     <h2>Criar jogo novo</h2>
     <div id="templates"></div>
-    <button id="btSound" class="small"></button>
+    <div class="chips"><button id="btImport" class="small">📥 Importar código</button><button id="btSound" class="small"></button></div>
   </aside>
   <main>
     <h2>Seus jogos</h2>
@@ -26,32 +26,20 @@
 </section>
 
 <section id="editor" class="screen" hidden>
-  <div class="col">
-    <div class="bar">
-      <button data-back class="round">‹</button>
-      <input id="edName" maxlength="30" autocomplete="off" placeholder="Nome do jogo">
-    </div>
-    <h3>Cenário</h3>
-    <div class="chips" id="edThemes"></div>
-    <div id="edTrackBox">
-      <h3>Obstáculos</h3>
-      <div class="seg" id="edMode">
-        <button data-m="random">Sorteados</button>
-        <button data-m="track">Pista montada</button>
-      </div>
-      <div class="chips" id="edPieces"></div>
-    </div>
-    <div id="trackWrap"><canvas id="track"></canvas></div>
-    <p class="hint" id="trackHint"></p>
+  <div class="edTop">
+    <button data-back class="round">‹</button>
+    <input id="edName" maxlength="30" autocomplete="off" placeholder="Nome do jogo">
+    <button id="edPlay" class="small">▶ Testar</button>
+    <button id="edTrain" class="small primary">🧠 Treinar IAs</button>
   </div>
-  <div class="col panel">
-    <h3 id="edDesc"></h3>
-    <div id="edParams"></div>
-    <div class="actions">
-      <button id="edTrain" class="primary">Treinar IAs</button>
-      <button id="edPlay">Jogar eu mesmo</button>
-      <button id="edDup">Duplicar</button>
-      <button id="edDel" class="danger">Excluir</button>
+  <div class="edBody">
+    <div class="edLeft">
+      <div id="edStage"><canvas id="edCv"></canvas><div id="edBadge"></div><div id="edActs"></div></div>
+      <div id="edTools"></div>
+    </div>
+    <div class="edRight panel">
+      <div class="seg" id="edTabs"></div>
+      <div id="edPane"></div>
     </div>
   </div>
 </section>
@@ -65,6 +53,7 @@
         <span>Geração <b id="stGen">1</b></span>
         <span>Vivas <b id="stAlive">0</b></span>
         <span>Pontos <b id="stScore">0</b></span>
+        <span><b id="stLives"></b></span>
         <span>Recorde <b id="stRec">0</b></span>
       </div>
     </div>
@@ -109,6 +98,16 @@
     </div>
   </aside>
 </section>
+
+<div id="modal" hidden>
+  <div class="box">
+    <b>Importar jogo</b>
+    <p>Cole aqui o código que um amigo mandou.</p>
+    <textarea id="impText" class="code" placeholder="EVO1...."></textarea>
+    <p id="impErr"></p>
+    <div class="actions"><button id="impOk" class="primary">Importar</button><button id="impNo">Cancelar</button></div>
+  </div>
+</div>
 
 <script src="js/core.js"></script>
 <script src="js/games.js"></script>
