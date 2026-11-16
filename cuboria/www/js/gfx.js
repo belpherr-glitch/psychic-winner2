@@ -122,6 +122,29 @@ void main() { vec4 p = uLVP * vec4(aPos, 1.0); vZ = p.z * 0.5 + 0.5; gl_Position
   const FS_SH = PREC + `
 varying float vZ;
 void main() { vec4 e = fract(vZ * vec4(1.0, 255.0, 65025.0, 16581375.0)); e -= e.yzww * vec4(1.0 / 255.0, 1.0 / 255.0, 1.0 / 255.0, 0.0); gl_FragColor = e; }`;
+  // modelos articulados: malha fixa + matriz por peça
+  const VS_MDL = `
+attribute vec3 aPos; attribute vec3 aCol; attribute vec3 aNorm; attribute float aE;
+uniform mat4 uVP; uniform mat4 uM; uniform vec3 uEye; uniform vec3 uLit; uniform vec3 uLightDir; uniform float uSunK; uniform float uFlash;
+varying vec3 vCol; varying vec3 vRaw; varying float vE; varying float vDist;
+void main() {
+  vec4 wp = uM * vec4(aPos, 1.0);
+  vec3 n = normalize((uM * vec4(aNorm, 0.0)).xyz);
+  float sh = 0.74 + 0.2 * n.y + 0.06 * abs(n.x) + uSunK * max(dot(n, uLightDir), 0.0) * 0.42;
+  vCol = mix(aCol * uLit * sh, vec3(1.0), uFlash); vRaw = aCol; vE = aE; vDist = length(wp.xyz - uEye);
+  gl_Position = uVP * wp;
+}`;
+  const FS_MDL = PREC + `
+uniform vec3 uFogCol; uniform vec2 uFog;
+varying vec3 vCol; varying vec3 vRaw; varying float vE; varying float vDist;
+void main() {
+  vec3 c = mix(vCol, vRaw * 1.15, vE);
+  float fog = smoothstep(uFog.x, uFog.y, vDist);
+  gl_FragColor = vec4(mix(c, uFogCol, fog), vE * 0.9 * (1.0 - fog));
+}`;
+  const VS_SHM = `
+attribute vec3 aPos; uniform mat4 uLVP; uniform mat4 uM; varying float vZ;
+void main() { vec4 p = uLVP * (uM * vec4(aPos, 1.0)); vZ = p.z * 0.5 + 0.5; gl_Position = p; }`;
   const VS_QUAD = 'attribute vec2 aP; varying vec2 vUv; void main() { vUv = aP * 0.5 + 0.5; gl_Position = vec4(aP, 0.0, 1.0); }';
   const FS_SKY = PREC + HASH + `
 uniform vec3 uF; uniform vec3 uR; uniform vec3 uU; uniform float uTan; uniform float uAsp;
@@ -218,6 +241,12 @@ void main() {
       return new Float32Array([xx, yx, zx, 0, xy, yy, zy, 0, xz, yz, zz, 0,
         -(xx * e[0] + xy * e[1] + xz * e[2]), -(yx * e[0] + yy * e[1] + yz * e[2]), -(zx * e[0] + zy * e[1] + zz * e[2]), 1]);
     },
+    trans(x, y, z) { const r = new Float32Array(16); r[0] = r[5] = r[10] = r[15] = 1; r[12] = x; r[13] = y; r[14] = z; return r; },
+    scale(x, y, z) { const r = new Float32Array(16); r[0] = x; r[5] = y; r[10] = z; r[15] = 1; return r; },
+    rotX(a) { const c = Math.cos(a), s = Math.sin(a), r = new Float32Array(16); r[0] = 1; r[5] = c; r[6] = s; r[9] = -s; r[10] = c; r[15] = 1; return r; },
+    rotY(a) { const c = Math.cos(a), s = Math.sin(a), r = new Float32Array(16); r[0] = c; r[2] = -s; r[5] = 1; r[8] = s; r[10] = c; r[15] = 1; return r; },
+    rotZ(a) { const c = Math.cos(a), s = Math.sin(a), r = new Float32Array(16); r[0] = c; r[1] = s; r[4] = -s; r[5] = c; r[10] = 1; r[15] = 1; return r; },
+    chain() { let m = arguments[0]; for (let i = 1; i < arguments.length; i++) m = M.mul(m, arguments[i]); return m; },
     mul(a, b) {
       const r = new Float32Array(16);
       for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
@@ -297,6 +326,9 @@ void main() {
       this.shc = this.prog(VS_SHC, FS_SH, ['aPos', 'aLight', 'aInfo', 'aNorm']);
       this.she = this.prog(VS_SHE, FS_SH, ['aPos', 'aCol', 'aLit', 'aNE']);
       this.vmBuf = gl.createBuffer();
+      this.mdl = this.prog(VS_MDL, FS_MDL, ['aPos', 'aCol', 'aNorm', 'aE']);
+      this.shm = this.prog(VS_SHM, FS_SH, ['aPos']);
+      this.models = []; this.vmodels = [];
       this.shFrame = 0;
       this.quad = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, this.quad);
@@ -697,6 +729,46 @@ void main() {
         gl.vertexAttribPointer(3, 2, gl.FLOAT, false, 44, 36);
         gl.drawArrays(gl.TRIANGLES, 0, batch.n);
       }
+      if (this.models.length) {
+        const sm = this.shm;
+        gl.useProgram(sm.p);
+        gl.uniformMatrix4fv(sm.u.uLVP, false, this.lvp);
+        gl.enableVertexAttribArray(0);
+        for (let i = 1; i < 4; i++) gl.disableVertexAttribArray(i);
+        for (const d of this.models) {
+          if (!d.mesh.vb) continue;
+          gl.bindBuffer(gl.ARRAY_BUFFER, d.mesh.vb);
+          gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 40, 0);
+          gl.uniformMatrix4fv(sm.u.uM, false, d.m);
+          gl.drawArrays(gl.TRIANGLES, 0, d.mesh.n);
+        }
+      }
+    }
+    drawModels(list, env, fogOff) {
+      if (!list.length) return;
+      const gl = this.gl, P = this.mdl;
+      gl.useProgram(P.p);
+      gl.uniformMatrix4fv(P.u.uVP, false, this.vp);
+      gl.uniform3fv(P.u.uEye, this.eye);
+      gl.uniform3fv(P.u.uLightDir, env.lightDir);
+      gl.uniform3fv(P.u.uFogCol, env.fogCol);
+      if (fogOff) gl.uniform2f(P.u.uFog, 1000, 2000); else gl.uniform2fv(P.u.uFog, env.fog);
+      for (let i = 0; i < 4; i++) gl.enableVertexAttribArray(i);
+      for (const d of list) {
+        const m = d.mesh;
+        if (!m.n) continue;
+        if (!m.vb) { m.vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, m.vb); gl.bufferData(gl.ARRAY_BUFFER, m.data, gl.STATIC_DRAW); }
+        else gl.bindBuffer(gl.ARRAY_BUFFER, m.vb);
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 40, 0);
+        gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 40, 12);
+        gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 40, 24);
+        gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 40, 36);
+        gl.uniformMatrix4fv(P.u.uM, false, d.m);
+        gl.uniform3fv(P.u.uLit, d.lit);
+        gl.uniform1f(P.u.uSunK, d.sunK || 0);
+        gl.uniform1f(P.u.uFlash, d.flash || 0);
+        gl.drawArrays(gl.TRIANGLES, 0, m.n);
+      }
     }
     shUniforms(prog, on) {
       const gl = this.gl;
@@ -773,6 +845,9 @@ void main() {
         gl.disableVertexAttribArray(3);
       }
 
+      this.drawModels(this.models, env, false);
+      gl.disableVertexAttribArray(3);
+
       gl.enable(gl.BLEND);
       gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
       gl.depthMask(false);
@@ -782,24 +857,7 @@ void main() {
       for (let k = vis.length - 1; k >= 0; k--) if (vis[k].T) this.drawSec(ck, vis[k], vis[k].T);
       gl.depthMask(true);
       gl.disable(gl.BLEND);
-      if (vm && vm.n) {
-        gl.clear(gl.DEPTH_BUFFER_BIT);
-        const en = this.ent;
-        gl.useProgram(en.p);
-        gl.uniformMatrix4fv(en.u.uMVP, false, this.vp);
-        gl.uniform3fv(en.u.uEye, e);
-        gl.uniform2f(en.u.uFog, 1000, 2000);
-        gl.uniform1f(en.u.uDirK, 0);
-        this.shUniforms(en, false);
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vmBuf);
-        gl.bufferData(gl.ARRAY_BUFFER, vm.d.subarray(0, vm.n * 11), gl.DYNAMIC_DRAW);
-        for (let i = 0; i < 4; i++) gl.enableVertexAttribArray(i);
-        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 44, 0);
-        gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 44, 12);
-        gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 44, 24);
-        gl.vertexAttribPointer(3, 2, gl.FLOAT, false, 44, 36);
-        gl.drawArrays(gl.TRIANGLES, 0, vm.n);
-      }
+      if (this.vmodels.length) { gl.clear(gl.DEPTH_BUFFER_BIT); this.drawModels(this.vmodels, env, true); }
       gl.disable(gl.DEPTH_TEST);
 
       const bloom = this.quality > 0;

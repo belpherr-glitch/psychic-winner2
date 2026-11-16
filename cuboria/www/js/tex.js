@@ -137,12 +137,12 @@
   { const t = new T(65).fill(C(B.CACTUS)); for (let x = 0; x < N; x += 4) for (let y = 0; y < N; y++) t.set(x, y, sh(C(B.CACTUS), 0.7)); for (let i = 0; i < 10; i++) t.set(1 + Math.floor(t.r() * 3) * 4 + 1, Math.floor(t.r() * N), [240, 240, 200]); tiles[B.CACTUS] = same(t); }
   // folhas: tufos com buracos
   const leaves = (c, c2, seed) => {
-    const t = new T(seed).fill(sh(c, 0.72));
-    for (let i = 0; i < 22; i++) {
-      const x = Math.floor(t.r() * N), y = Math.floor(t.r() * N), k = 0.88 + t.r() * 0.3;
-      t.set(x, y, sh(c, k * 1.12)); t.set(x + 1, y, sh(c, k)); t.set(x, y + 1, sh(c, k)); t.set(x + 1, y + 1, sh(c2, k * 0.9));
+    const t = new T(seed).fill(sh(c, 0.9));
+    for (let i = 0; i < 9; i++) {
+      const x = Math.floor(t.r() * N), y = Math.floor(t.r() * N);
+      for (let dy = 0; dy < 3; dy++) for (let dx = 0; dx < 3; dx++) t.set(x + dx, y + dy, dy === 0 || dx === 0 ? sh(c, 1.14) : dy === 2 && dx === 2 ? sh(c2, 0.82) : c);
     }
-    for (let i = 0; i < 16; i++) t.set(Math.floor(t.r() * N), Math.floor(t.r() * N), [0, 0, 0], 0);
+    for (let i = 0; i < 5; i++) { const x = Math.floor(t.r() * N), y = Math.floor(t.r() * N); t.set(x, y, sh(c2, 0.6)); t.set(x + 1, y, [0, 0, 0], 0); }
     return t;
   };
   for (const id of [B.LEAVES, B.PLEAVES, B.PINE, B.LEAF_Y, B.LEAF_B, B.LEAF_V, B.LEAF_O]) tiles[id] = same(leaves(C(id), C2(id), 70 + id));

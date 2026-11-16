@@ -467,9 +467,10 @@
     golem: { name: 'Golem de musgo', w: 1.05, h: 3.7, hp: 90, dmg: 20, drop: [[I.BAR_IRON, 1, 3, 0.7], [B.RUBY, 1, 1, 0.25]] },
   };
   const SLIMECOL = [[0.35, 0.85, 0.5], [0.35, 0.65, 1], [1, 0.45, 0.7], [0.8, 0.5, 1]];
+  const SW_T = 0.34;
   function spawnMob(type, x, y, z) {
     const T = MOB[type], hp = T.hp * (1 + G.day * 0.08);
-    G.mobs.push({ type, x, y, z, vx: 0, vy: 0, vz: 0, w: T.w, h: T.h, hp, max: hp, t: Math.random() * 2, flash: 0, yaw: 0, col: SLIMECOL[Math.floor(Math.random() * 4)], onGround: false, anim: Math.random() * 6 });
+    G.mobs.push({ type, x, y, z, vx: 0, vy: 0, vz: 0, w: T.w, h: T.h, hp, max: hp, t: Math.random() * 2, flash: 0, yaw: 0, skin: Math.floor(Math.random() * 4), get col() { return SLIMECOL[this.skin]; }, onGround: false, anim: Math.random() * 6 });
   }
   function trySpawn() {
     const w = G.world, p = G.p, night = G.daylight < 0.3;
@@ -818,69 +819,85 @@
       lightDir, dirK, focus: [G.p.x, G.p.y + 2, G.p.z], ink: [0.05, 0.04, 0.12] };
   }
 
-  // ───── desenho das entidades ─────
-  const SKIN = [1, 0.8, 0.62], SHIRT = [0.32, 0.62, 0.98], PANTS = [0.26, 0.24, 0.48], HAIR = [0.4, 0.22, 0.14], SHOE = [0.25, 0.17, 0.12], INKC = [0.1, 0.08, 0.2];
-  function heldModel(m, s, arm, swingA) {
-    if (!s) return;
-    const limb = { p: [0.34, 1.28, 0], ax: arm };
-    if (s.id < 100) { batch.box(m, 0.34, 0.68, 0.18, 0.11, 0.11, 0.11, itemCol(s.id), D[s.id].light ? 0.6 : 0, limb); return; }
-    const it = IT[s.id], c = it.c.map((v) => v / 255), wood = [0.6, 0.42, 0.25], e = it.glow ? 0.7 : 0;
-    if (it.tool === 'sword') {
-      batch.box(m, 0.34, 0.74, 0.12, 0.035, 0.035, 0.12, wood, 0, limb);
-      batch.box(m, 0.34, 0.74, 0.24, 0.12, 0.035, 0.03, [0.3, 0.25, 0.2], 0, limb);
-      batch.box(m, 0.34, 0.74, 0.62, 0.05, 0.03, 0.36, c, e, limb);
-    } else if (it.tool === 'pick') {
-      batch.box(m, 0.34, 0.74, 0.28, 0.035, 0.035, 0.3, wood, 0, limb);
-      batch.box(m, 0.34, 0.74, 0.55, 0.05, 0.28, 0.05, c, e, limb);
-    } else batch.box(m, 0.34, 0.68, 0.18, 0.1, 0.06, 0.1, c, 0, limb);
+  // ───── desenho das entidades: modelos articulados (peça filha herda a matriz da mãe) ─────
+  const MX = CB.M, MD = CB.MDL, SW = 0.34;
+  const ease = (t) => t * t * (3 - 2 * t);
+  const PSC = 3.35 / 27; // pixel do personagem em blocos
+  function push(list, mesh, m, lit, sunK, flash) { list.push({ mesh, m, lit, sunK, flash }); }
+  function lightFor(x, y, z) {
+    // pega o ponto mais claro entre o meio e um pouco acima (o meio pode estar dentro do chão inclinado)
+    const w = G.world, a = w.light(Math.floor(x), Math.floor(y), Math.floor(z)), b = w.light(Math.floor(x), Math.floor(y + 1.5), Math.floor(z));
+    const up = b[0] + b[1] + b[2] + b[3] > a[0] + a[1] + a[2] + a[3];
+    return { lit: litAt(x, up ? y + 1.5 : y, z), sunK: G.env.dirK * ((up ? b[0] : a[0]) / 15) };
   }
-  const EYEW = [0.97, 0.97, 1], IRIS = [0.25, 0.55, 0.95], BROW = [0.3, 0.16, 0.1], MOUTH = [0.65, 0.3, 0.3], BELT = [0.45, 0.3, 0.15], BUCK = [1, 0.85, 0.3];
+  // pose do braço que segura o item: ângulo do ombro (A), do pulso (b) e giro do tronco
+  function armPose(fp) {
+    const p = G.p, has = !!p.inv[p.sel];
+    const rest = fp ? -1.72 : has ? -0.42 : 0;
+    let A = rest, b = -0.52 - rest, twist = 0;
+    if (p.swing > 0) {
+      const t = 1 - p.swing / SW, up = fp ? 0.8 : 2.1, dn = fp ? 0.95 : 0.9;
+      let o;
+      if (t < 0.3) o = -up * ease(t / 0.3);
+      else if (t < 0.6) o = -up + (up + dn) * ease((t - 0.3) / 0.3);
+      else o = dn * (1 - ease((t - 0.6) / 0.4));
+      A = rest + o;
+      twist = fp ? 0 : (t < 0.3 ? -0.35 * ease(t / 0.3) : t < 0.6 ? -0.35 + 0.8 * ease((t - 0.3) / 0.3) : 0.45 * (1 - ease((t - 0.6) / 0.4)));
+      if (t > 0.3 && t < 0.75) b -= 0.45 * Math.sin(((t - 0.3) / 0.45) * Math.PI);
+    } else if (p.mine) {
+      const t = (G.time * 3.1) % 1, up = fp ? 0.7 : 1.7;
+      const o = t < 0.55 ? -up * ease(t / 0.55) : -up * (1 - ease((t - 0.55) / 0.3 > 1 ? 1 : (t - 0.55) / 0.3)) + (t > 0.85 ? 0.12 * Math.sin(((t - 0.85) / 0.15) * Math.PI) : 0);
+      A = rest + o;
+      twist = fp ? 0 : -0.12 + 0.24 * (t > 0.55 ? 1 : 0);
+      b -= t > 0.55 && t < 0.9 ? 0.3 : 0;
+    }
+    return { A, b, twist };
+  }
+  // item preso na mão: a malha já tem a origem no ponto de pegar
+  function heldItem(list, hand, s, b, L, roll) {
+    if (!s) return;
+    const im = CB.itemModel(s.id);
+    let m;
+    if (im.kind === 'tool') m = roll ? MX.chain(hand, MX.rotX(b), MX.rotY(roll), MX.rotZ(-0.5)) : MX.chain(hand, MX.rotX(b));
+    else if (im.kind === 'block') m = MX.chain(hand, MX.trans(0, -0.5, 3.6), MX.rotY(0.5));
+    else m = MX.chain(hand, MX.rotX(b), MX.trans(0, 0, 3), MX.scale(0.75, 0.75, 0.75));
+    push(list, im.mesh, m, L.lit, L.sunK, 0);
+  }
   function drawPlayer() {
     const p = G.p;
     if (p.dead > 0 || G.cam.cur < 1.6) return;
-    if (p.invul > 0 && Math.floor(p.invul * 14) % 2) return;
-    const m = { x: p.x, y: p.y, z: p.z, yaw: p.yaw, lit: litAt(p.x, p.y + 2, p.z), scale: PS };
-    const moving = Math.hypot(p.vx, p.vz) > 1 && p.onGround, sw = moving ? Math.sin(p.walk * 0.55) * 0.75 : 0;
-    const air = !p.onGround && !p.inWater ? 0.5 : 0, bob = moving ? Math.abs(Math.sin(p.walk * 0.55)) * 0.03 : 0;
-    // pernas e botas
-    for (const [sx, a] of [[-0.11, sw + air], [0.11, -sw - air * 0.4]]) {
-      const L = { p: [sx, 0.72, 0], ax: a };
-      batch.box(m, sx, 0.42, 0, 0.1, 0.3, 0.11, PANTS, 0, L);
-      batch.box(m, sx, 0.08, 0.025, 0.11, 0.08, 0.14, SHOE, 0, L);
-    }
-    const by = bob;
-    // tronco: camisa, gola, cinto
-    batch.box(m, 0, 1.0 + by, 0, 0.24, 0.3, 0.14, SHIRT);
-    batch.box(m, 0, 1.24 + by, 0.141, 0.1, 0.05, 0.005, SKIN);
-    batch.box(m, 0, 0.75 + by, 0, 0.25, 0.045, 0.15, BELT);
-    batch.box(m, 0, 0.75 + by, 0.152, 0.045, 0.035, 0.005, BUCK, 0.2);
-    // cabeça com rosto
-    const hy = 1.52 + by;
-    batch.box(m, 0, hy, 0, 0.24, 0.24, 0.24, SKIN);
-    batch.box(m, 0, hy + 0.21, -0.01, 0.26, 0.07, 0.26, HAIR);
-    batch.box(m, 0, hy + 0.06, -0.21, 0.26, 0.2, 0.06, HAIR);
-    batch.box(m, -0.255, hy + 0.06, -0.05, 0.02, 0.18, 0.2, HAIR);
-    batch.box(m, 0.255, hy + 0.06, -0.05, 0.02, 0.18, 0.2, HAIR);
-    batch.box(m, -0.12, hy + 0.16, 0.245, 0.11, 0.035, 0.012, HAIR);
-    batch.box(m, 0.09, hy + 0.17, 0.245, 0.08, 0.03, 0.012, HAIR);
-    for (const sx of [-0.095, 0.095]) {
-      batch.box(m, sx, hy + 0.0, 0.244, 0.055, 0.06, 0.006, EYEW);
-      batch.box(m, sx + 0.012, hy - 0.005, 0.25, 0.032, 0.045, 0.006, IRIS);
-      batch.box(m, sx + 0.016, hy - 0.01, 0.255, 0.016, 0.022, 0.004, INKC);
-      batch.box(m, sx, hy + 0.09, 0.246, 0.055, 0.014, 0.006, BROW);
-    }
-    batch.box(m, 0, hy - 0.13, 0.245, 0.05, 0.014, 0.006, MOUTH);
-    // braços (o direito balança quando bate ou cava)
-    let arm = -sw * 0.8;
-    if (p.swing > 0) { const k = 1 - p.swing / 0.34; arm = -2.4 + k * 3.2; }
-    else if (p.mine) arm = -1.2 - Math.abs(Math.sin(G.time * 14)) * 1.0;
-    else if (p.inv[p.sel]) arm = Math.min(arm, -0.25);
-    const LA = { p: [-0.34, 1.28 + by, 0], ax: sw * 0.8 }, RA = { p: [0.34, 1.28 + by, 0], ax: arm };
-    batch.box(m, -0.34, 1.05 + by, 0, 0.09, 0.25, 0.09, SHIRT, 0, LA);
-    batch.box(m, -0.34, 0.74 + by, 0, 0.08, 0.07, 0.08, SKIN, 0, LA);
-    batch.box(m, 0.34, 1.05 + by, 0, 0.09, 0.25, 0.09, SHIRT, 0, RA);
-    batch.box(m, 0.34, 0.74 + by, 0, 0.08, 0.07, 0.08, SKIN, 0, RA);
-    heldModel(m, p.inv[p.sel], arm);
+    const P = MD.player, L = lightFor(p.x, p.y + 2, p.z), fl = p.invul > 0 && Math.floor(p.invul * 12) % 2 ? 0.55 : 0;
+    const sp = Math.hypot(p.vx, p.vz), moving = sp > 1 && p.onGround, ph = p.walk * 0.55;
+    const sw = moving ? Math.sin(ph) * 0.85 : 0, air = !p.onGround && !p.inWater ? 1 : 0, swim = p.inWater ? Math.sin(G.time * 5) * 0.5 : 0;
+    const bob = moving ? Math.abs(Math.cos(ph)) * 0.7 : Math.sin(G.time * 2) * 0.12;
+    const root = MX.chain(MX.trans(p.x, p.y, p.z), MX.rotY(p.yaw), MX.scale(PSC, PSC, PSC));
+    const A = (mesh, m) => push(gfx.models, mesh, m, L.lit, L.sunK, fl);
+    A(P.leg, MX.chain(root, MX.trans(-2, 9, 0), MX.rotX(sw + air * 0.5 + swim)));
+    A(P.leg, MX.chain(root, MX.trans(2, 9, 0), MX.rotX(-sw - air * 0.35 - swim)));
+    const pose = armPose(false);
+    const torso = MX.chain(root, MX.trans(0, 9 + bob, 0), MX.rotY(pose.twist), MX.rotX(moving ? 0.08 : 0));
+    A(P.torso, torso);
+    A(P.head, MX.chain(torso, MX.trans(0, 9, 0), MX.rotY(-pose.twist * 0.7), MX.rotX(clamp(G.cam.pitch * 0.55, -0.6, 0.6))));
+    A(P.arm, MX.chain(torso, MX.trans(-5.5, 8, 0), MX.rotX(sw * 0.75 - air * 0.9 + Math.sin(G.time * 2) * 0.03), MX.rotZ(-0.07 - air * 0.25)));
+    const busy = p.swing > 0 || p.mine || p.inv[p.sel];
+    const armR = MX.chain(torso, MX.trans(5.5, 8, 0), MX.rotX(busy ? pose.A + sw * -0.15 : -sw * 0.75 - air * 0.9), MX.rotZ(0.07 + (busy ? 0 : air * 0.25)));
+    A(P.arm, armR);
+    heldItem(gfx.models, MX.chain(armR, MX.trans(0, -9.6, 0.4)), p.inv[p.sel], pose.b, L);
+  }
+  // primeira pessoa: o mesmo braço e o mesmo item, presos à câmera
+  function drawViewModel() {
+    gfx.vmodels.length = 0;
+    const p = G.p;
+    if (cfg.tp || p.dead > 0) return;
+    const e = G.eye, r = gfx.right, u = gfx.up, f = gfx.fwd, L = lightFor(e[0], e[1] - 0.5, e[2]);
+    const cam = new Float32Array([r[0], r[1], r[2], 0, u[0], u[1], u[2], 0, -f[0], -f[1], -f[2], 0, e[0], e[1], e[2], 1]);
+    const moving = Math.hypot(p.vx, p.vz) > 1 && p.onGround, ph = p.walk * 0.55;
+    const bx = moving ? Math.sin(ph) * 0.012 : 0, by = moving ? Math.abs(Math.cos(ph)) * 0.014 : Math.sin(G.time * 2) * 0.003;
+    const pose = armPose(true), k = 0.034;
+    const sway = p.swing > 0 ? Math.sin((1 - p.swing / SW) * Math.PI) * 0.25 : 0;
+    const arm = MX.chain(cam, MX.trans(0.4 + bx - sway * 0.2, -0.3 + by, -0.42), MX.rotY(Math.PI + 0.16 + sway), MX.rotZ(0.1), MX.scale(k, k, k), MX.rotX(pose.A));
+    push(gfx.vmodels, MD.player.arm, arm, L.lit, L.sunK, 0);
+    heldItem(gfx.vmodels, MX.chain(arm, MX.trans(0, -9.6, 0.4)), p.inv[p.sel], pose.b, L, 0.55);
   }
   // nuvens fofas feitas de caixas (ganham contorno como o resto)
   function makeClouds(seed) {
@@ -912,87 +929,49 @@
     }
   }
   function drawMob(mb) {
-    const lit = mb.flash > 0 ? [3, 3, 3] : litAt(mb.x, mb.y + mb.h / 2, mb.z);
-    const m = { x: mb.x, y: mb.y, z: mb.z, yaw: mb.yaw, lit, scale: mb.type === 'golem' ? 1.95 : 2 };
+    const L = lightFor(mb.x, mb.y + mb.h / 2, mb.z), fl = mb.flash > 0 ? 0.75 : 0;
+    const A = (mesh, m) => push(gfx.models, mesh, m, L.lit, L.sunK, fl);
+    const base = MX.chain(MX.trans(mb.x, mb.y, mb.z), MX.rotY(mb.yaw));
     if (mb.type === 'slime') {
-      const sq = mb.onGround ? 1 + Math.sin(mb.anim * 6) * 0.06 : 1 - clamp(mb.vy * 0.03, -0.15, 0.2);
-      const hy = 0.36 * sq, hx = 0.42 / Math.sqrt(sq);
-      batch.box(m, 0, hy, 0, hx, hy, hx, mb.col, 0.12);
-      batch.box(m, 0, hy * 0.9, 0, hx * 0.6, hy * 0.55, hx * 0.6, mb.col.map((v) => v * 0.6), 0.2);
-      batch.box(m, -0.14, hy * 1.25, hx, 0.06, 0.08, 0.01, INKC);
-      batch.box(m, 0.14, hy * 1.25, hx, 0.06, 0.08, 0.01, INKC);
+      const sq = mb.onGround ? 1 + Math.sin(mb.anim * 7) * 0.07 : clamp(1 + mb.vy * 0.022, 0.75, 1.35), s = 0.132, w = 1 / Math.sqrt(sq);
+      A(MD.SLIMES[mb.skin], MX.chain(base, MX.scale(s * w, s * sq, s * w)));
     } else if (mb.type === 'bat') {
-      const fl = Math.sin(mb.anim * 18) * 0.8, c = [0.42, 0.3, 0.5];
-      batch.box(m, 0, 0.22, 0, 0.14, 0.14, 0.14, c);
-      batch.box(m, -0.3, 0.26, 0, 0.18, 0.03, 0.12, c.map((v) => v * 0.8), 0, { p: [-0.12, 0.26, 0], az: fl });
-      batch.box(m, 0.3, 0.26, 0, 0.18, 0.03, 0.12, c.map((v) => v * 0.8), 0, { p: [0.12, 0.26, 0], az: -fl });
-      batch.box(m, -0.06, 0.26, 0.14, 0.03, 0.03, 0.01, [1, 0.3, 0.3], 0.9);
-      batch.box(m, 0.06, 0.26, 0.14, 0.03, 0.03, 0.01, [1, 0.3, 0.3], 0.9);
+      const s = 0.105, fl2 = Math.sin(mb.anim * 20) * 0.9, root = MX.chain(base, MX.trans(0, 0.25 + Math.sin(mb.anim * 20 + 1) * 0.08, 0), MX.scale(s, s, s), MX.rotX(0.25));
+      A(MD.bat.body, root);
+      for (const sd of [1, -1]) {
+        const a = MX.chain(root, MX.trans(sd * 3, 3.5, 0), MX.scale(sd, 1, 1), MX.rotZ(fl2));
+        A(MD.bat.wingA, a);
+        A(MD.bat.wingB, MX.chain(a, MX.trans(6, 0.5, 0), MX.rotZ(fl2 * 0.9)));
+      }
     } else if (mb.type === 'wisp') {
-      const c = [0.75, 0.45, 1];
-      batch.box(m, 0, 0.45, 0, 0.22, 0.22, 0.22, c, 0.85, null, mb.anim * 2);
-      batch.box(m, 0, 0.45, 0, 0.12, 0.12, 0.12, [1, 0.95, 1], 1, null, -mb.anim * 3);
-      for (let k = 0; k < 3; k++) batch.box(m, Math.sin(mb.anim * 3 + k * 2) * 0.35, 0.2 - k * 0.12, Math.cos(mb.anim * 3 + k * 2) * 0.35, 0.06, 0.06, 0.06, c, 0.9);
+      const s = 0.125, root = MX.chain(base, MX.trans(0, 0.3 + Math.sin(mb.anim * 2.2) * 0.15, 0), MX.scale(s, s, s), MX.rotX(0.12), MX.rotZ(Math.sin(mb.anim * 1.7) * 0.06));
+      A(MD.wisp.body, root);
+      for (const sd of [1, -1]) A(MD.wisp.hand, MX.chain(root, MX.trans(sd * (6.5 + Math.sin(mb.anim * 3 + sd) * 0.8), 7 + Math.sin(mb.anim * 2.6 + sd * 2) * 1.2, 4.5), MX.rotY(mb.anim * 2 * sd)));
     } else {
-      const sw = Math.sin(mb.anim * 5) * (Math.hypot(mb.vx, mb.vz) > 0.5 ? 0.5 : 0), st = [0.5, 0.52, 0.56], moss = [0.35, 0.62, 0.32];
-      batch.box(m, -0.22, 0.4, 0, 0.17, 0.4, 0.18, st, 0, { p: [-0.22, 0.8, 0], ax: sw });
-      batch.box(m, 0.22, 0.4, 0, 0.17, 0.4, 0.18, st, 0, { p: [0.22, 0.8, 0], ax: -sw });
-      batch.box(m, 0, 1.2, 0, 0.42, 0.42, 0.28, st);
-      batch.box(m, 0, 1.55, 0, 0.44, 0.1, 0.3, moss);
-      batch.box(m, 0, 1.72, 0.04, 0.24, 0.18, 0.22, st);
-      batch.box(m, -0.09, 1.74, 0.27, 0.05, 0.04, 0.01, [0.5, 1, 0.6], 1);
-      batch.box(m, 0.09, 1.74, 0.27, 0.05, 0.04, 0.01, [0.5, 1, 0.6], 1);
-      batch.box(m, -0.56, 1.0, 0, 0.13, 0.42, 0.14, st, 0, { p: [-0.56, 1.45, 0], ax: -sw });
-      batch.box(m, 0.56, 1.0, 0, 0.13, 0.42, 0.14, st, 0, { p: [0.56, 1.45, 0], ax: sw });
+      const s = 0.154, mv = Math.hypot(mb.vx, mb.vz) > 0.5 ? 1 : 0, sw = Math.sin(mb.anim * 5.5) * 0.55 * mv, stomp = Math.abs(Math.cos(mb.anim * 5.5)) * 0.6 * mv;
+      const root = MX.chain(base, MX.scale(s, s, s));
+      A(MD.golem.leg, MX.chain(root, MX.trans(-3, 8, 0), MX.rotX(sw)));
+      A(MD.golem.leg, MX.chain(root, MX.trans(3, 8, 0), MX.rotX(-sw)));
+      const torso = MX.chain(root, MX.trans(0, 8 + stomp, 0), MX.rotY(sw * 0.2), MX.rotX(0.1));
+      A(MD.golem.torso, torso);
+      A(MD.golem.head, MX.chain(torso, MX.trans(0, 10.5, 0.5), MX.rotY(-sw * 0.2)));
+      A(MD.golem.arm, MX.chain(torso, MX.trans(-8.2, 9, 0), MX.rotX(-sw * 0.8 - 0.25), MX.rotZ(-0.1)));
+      A(MD.golem.arm, MX.chain(torso, MX.trans(8.2, 9, 0), MX.rotX(sw * 0.8 - 0.25), MX.rotZ(0.1)));
     }
-  }
-  function drawViewModel() {
-    vmb.reset();
-    const p = G.p;
-    if (cfg.tp || p.dead > 0) return;
-    const e = G.eye, moving = Math.hypot(p.vx, p.vz) > 1 && p.onGround;
-    const bob = moving ? Math.sin(p.walk * 0.55) : 0;
-    const m = { x: e[0], y: e[1], z: e[2], yaw: G.cam.yaw, pitch: G.cam.pitch, lit: litAt(e[0], e[1] - 0.5, e[2]) };
-    let ax = 0;
-    if (p.swing > 0) { const k = 1 - p.swing / 0.34; ax = Math.sin(k * Math.PI) * 1.3; }
-    else if (p.mine) ax = Math.abs(Math.sin(G.time * 14)) * 0.7;
-    const ox = -0.3 + bob * 0.012, oy = -0.27 + Math.abs(bob) * 0.02;
-    const L = { p: [ox, oy, 0.3], ax: -ax, az: bob * 0.04 };
-    vmb.box(m, ox - 0.02, oy - 0.03, 0.42, 0.05, 0.05, 0.14, SHIRT, 0, L);
-    vmb.box(m, ox - 0.02, oy - 0.025, 0.58, 0.045, 0.045, 0.035, SKIN, 0, L);
-    const s = p.inv[p.sel];
-    if (!s) return;
-    const hz = 0.6, hy = oy - 0.02;
-    if (s.id === B.TORCH) {
-      vmb.box(m, ox - 0.02, hy + 0.05, hz, 0.01, 0.07, 0.01, [0.45, 0.3, 0.17], 0, L);
-      vmb.box(m, ox - 0.02, hy + 0.13, hz, 0.018, 0.02, 0.018, [1, 0.72, 0.3], 1, L);
-      return;
-    }
-    if (s.id < 100) { vmb.box(m, ox - 0.01, hy + 0.03, hz + 0.02, 0.04, 0.04, 0.04, itemCol(s.id), D[s.id].light ? 0.6 : 0, L, 0.6); return; }
-    const it = IT[s.id], c = it.c.map((v) => v / 255), wood = [0.45, 0.3, 0.17], em = it.glow ? 0.7 : 0;
-    const T = { p: L.p, ax: L.ax - 0.5, az: L.az + 0.25 };
-    if (it.tool === 'sword') {
-      vmb.box(m, ox - 0.02, hy + 0.015, hz, 0.012, 0.04, 0.012, wood, 0, T);
-      vmb.box(m, ox - 0.02, hy + 0.06, hz, 0.04, 0.01, 0.014, [0.3, 0.25, 0.2], 0, T);
-      vmb.box(m, ox - 0.02, hy + 0.18, hz, 0.016, 0.11, 0.007, c, em, T);
-      vmb.box(m, ox - 0.02, hy + 0.18, hz + 0.005, 0.006, 0.1, 0.005, c.map((v) => Math.min(1, v * 1.3)), em, T);
-    } else if (it.tool === 'pick') {
-      vmb.box(m, ox - 0.02, hy + 0.08, hz, 0.01, 0.1, 0.01, wood, 0, T);
-      vmb.box(m, ox - 0.02, hy + 0.18, hz, 0.014, 0.014, 0.05, c, em, T);
-      vmb.box(m, ox - 0.02, hy + 0.17, hz + 0.065, 0.012, 0.02, 0.018, c, em, T);
-      vmb.box(m, ox - 0.02, hy + 0.17, hz - 0.065, 0.012, 0.02, 0.018, c, em, T);
-    } else vmb.box(m, ox - 0.02, hy + 0.03, hz, 0.04, 0.03, 0.04, c, 0, T);
   }
   function drawWorldBits() {
     batch.reset();
+    gfx.models.length = 0;
     drawClouds();
     if (cfg.tp) drawPlayer();
     drawViewModel();
     for (const mb of G.mobs) if (Math.hypot(mb.x - G.eye[0], mb.z - G.eye[2]) < gfx.viewDist) drawMob(mb);
     for (const d of G.drops) {
-      const m = { x: d.x, y: d.y + 0.3 + Math.sin(d.age * 3) * 0.1, z: d.z, yaw: 0, lit: litAt(d.x, d.y + 0.4, d.z), scale: 2 };
-      const emis = d.id < 100 && D[d.id].light ? 0.6 : d.id >= 100 && IT[d.id].glow ? 0.6 : 0;
-      batch.box(m, 0, 0, 0, 0.13, 0.13, 0.13, itemCol(d.id), emis, null, d.age * 2);
+      const im = CB.itemModel(d.id), L = lightFor(d.x, d.y + 0.4, d.z), y = d.y + 0.45 + Math.sin(d.age * 3) * 0.1;
+      const m = im.kind === 'block'
+        ? MX.chain(MX.trans(d.x, y, d.z), MX.rotY(d.age * 2), MX.scale(0.07, 0.07, 0.07))
+        : MX.chain(MX.trans(d.x, y, d.z), MX.rotY(d.age * 2), MX.scale(0.055, 0.055, 0.055), MX.rotX(-Math.PI / 2), MX.trans(0, im.mesh.grip[0] - 7.5, 7.5 - im.mesh.grip[1]));
+      push(gfx.models, im.mesh, m, L.lit, L.sunK, 0);
     }
     for (const q of G.parts) {
       const m = { x: q.x, y: q.y, z: q.z, yaw: 0, lit: q.emis ? [1, 1, 1] : litAt(q.x, q.y, q.z) };
@@ -1261,7 +1240,7 @@
     if (screen === 'play') update(dt);
     gfx.setCamera(G.eye, G.fwd);
     drawWorldBits();
-    gfx.render(G.world, G.env, G.time, batch, G.hurtFx, vmb);
+    gfx.render(G.world, G.env, G.time, batch, G.hurtFx);
     drawOverlay();
     updateHud();
   }
