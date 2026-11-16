@@ -1,0 +1,6 @@
+{
+  "appId": "com.valebrisa.game",
+  "appName": "Vale Brisa",
+  "webDir": "dist",
+  "android": { "backgroundColor": "#ffe9c9" }
+}

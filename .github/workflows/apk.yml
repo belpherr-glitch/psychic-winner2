@@ -1,0 +1,48 @@
+name: Build APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+      - name: Compilar APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk ../vale-brisa.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vale-brisa-apk
+          path: vale-brisa.apk
+      - name: Publicar em Releases (link direto pro celular)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Vale Brisa - ultima versao
+          body: "APK mais recente (commit ${{ github.sha }}). Baixe o arquivo vale-brisa.apk abaixo e instale."
+          prerelease: true
+          files: vale-brisa.apk
