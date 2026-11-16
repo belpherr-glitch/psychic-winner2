@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#1b1640">
+<title>Cubória</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="cv"></canvas>
+<canvas id="ov"></canvas>
+
+<div id="rotate"><div><b>↻</b>Vire o celular de lado pra jogar</div></div>
+
+<section id="menu" class="screen">
+  <div class="cubes"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="menuBox">
+    <h1 class="logo">Cub<span>ória</span></h1>
+    <p class="tag">Cave fundo, construa alto, enfrente o que sai do escuro.</p>
+    <div id="slots"></div>
+    <div class="row"><button id="btSettings" class="small">⚙ Configurações</button></div>
+  </div>
+</section>
+
+<section id="loading" class="screen" hidden>
+  <div class="menuBox center">
+    <h2 id="loadTitle">Criando o mundo…</h2>
+    <div class="bar"><i id="loadBar"></i></div>
+    <p id="loadTip" class="tip"></p>
+  </div>
+</section>
+
+<section id="hud" hidden>
+  <div class="tl">
+    <div class="hearts"><div id="hearts"></div><span id="hpText"></span></div>
+    <div class="clock"><svg id="dial" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" class="dialbg"/><g id="dialHand"><circle cx="20" cy="6" r="5" class="sun"/><circle cx="20" cy="34" r="4.5" class="moon"/></g></svg><span id="clock"></span></div>
+  </div>
+  <div class="tr">
+    <div class="btcol">
+      <button id="btCam" class="glass" aria-label="Câmera"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3.2"/></svg></button>
+      <button id="btBag" class="glass" aria-label="Mochila"><svg viewBox="0 0 24 24"><path d="M6 8h12l1 12H5z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/><path d="M9 13h6"/></svg></button>
+      <button id="btPause" class="glass" aria-label="Pausa"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
+    </div>
+    <div class="mapwrap"><canvas id="map" width="128" height="128"></canvas><b class="north">N</b></div>
+  </div>
+  <div id="tname"></div>
+  <div id="itemName"></div>
+  <div id="hotbar"></div>
+  <div id="stick"><i></i></div>
+  <button id="btJump" class="act glass" aria-label="Pular"><svg viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6"/></svg></button>
+  <button id="btUse" class="act big glass" aria-label="Usar"><img id="useIcon" alt=""></button>
+  <div id="toast"></div>
+</section>
+
+<section id="bag" class="screen dim" hidden>
+  <div class="panel">
+    <div class="panelHead"><b>Mochila</b><span id="bagInfo"></span><button id="bagClose" class="round small">✕</button></div>
+    <div class="bagBody">
+      <div><div id="grid"></div><p class="hint">Toque num item e depois em outro lugar pra trocar. A primeira fileira é a barra de baixo.</p></div>
+      <div class="craft"><h3>Criar <small id="stations"></small></h3><div id="recipes"></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="pause" class="screen dim" hidden>
+  <div class="menuBox center">
+    <h2>Pausado</h2>
+    <div class="col">
+      <button id="psResume" class="primary">Continuar</button>
+      <button id="psSettings">⚙ Configurações</button>
+      <button id="psQuit">Salvar e sair</button>
+    </div>
+  </div>
+</section>
+
+<section id="settings" class="screen dim" hidden>
+  <div class="menuBox">
+    <h2>Configurações</h2>
+    <div id="setBody"></div>
+    <button id="setClose" class="primary">Pronto</button>
+  </div>
+</section>
+
+<section id="dead" class="screen dim red" hidden>
+  <div class="menuBox center"><h2>Você desmaiou…</h2><p id="deadT" class="tip"></p></div>
+</section>
+
+<script src="js/data.js"></script>
+<script src="js/world.js"></script>
+<script src="js/gfx.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
