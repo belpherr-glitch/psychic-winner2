@@ -130,7 +130,8 @@ body:not(.touch) #btn-talk { right: 50%; transform: translateX(50%); bottom: 22%
 .panel { position: fixed; z-index: 20; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--panel); border: 3px solid #0b1224; box-shadow: inset 0 0 0 2px var(--panel-edge), 0 10px 40px rgba(0, 0, 0, 0.5); border-radius: 6px; padding: 14px; max-height: calc(100vh - 24px - var(--sat) - var(--sab)); max-width: calc(100vw - 24px); overflow: auto; }
 .panel h2 { margin: 0 0 8px; font-size: 20px; color: #fff3c4; text-shadow: 2px 2px 0 #000; }
 #invpanel { width: min(880px, calc(100vw - 24px)); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
-@media (max-width: 640px), (max-height: 420px) and (max-width: 900px) { #invpanel { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) { #invpanel { grid-template-columns: minmax(0, 1fr); } }
+@media (max-height: 460px) { #invpanel { padding: 10px; gap: 10px; } #craftlist { max-height: 62vh; } .panel h2 { font-size: 17px; margin-bottom: 4px; } }
 #invgrid { display: grid; grid-template-columns: repeat(9, 1fr); gap: 3px; }
 #invgrid .slot.hot { box-shadow: inset 0 0 0 2px #4a5f8c; }
 #invgrid .slot.sel { box-shadow: inset 0 0 0 2px var(--gold), 0 0 0 2px var(--gold); }

@@ -105,8 +105,8 @@ export class World {
           if (y === 0 || (y < 2 && hash2(x * 3 + y, z, 11) < 0.5)) id = B.BEDROCK;
           else if (y < HELL + 2) {
             id = B.ASH;
-            const c0 = 5 + n.noise2(x * 0.05, z * 0.05) * 2, c1 = HELL - 4 + n2.noise2(x * 0.06, z * 0.06) * 3;
-            if (y > c0 && y < c1) id = y <= 6 ? B.LAVA : B.AIR;
+            const c0 = 4 + n.noise2(x * 0.045, z * 0.045) * 4.5, c1 = HELL - 4 + n2.noise2(x * 0.06, z * 0.06) * 3;
+            if (y > c0 && y < c1) id = y <= 5 ? B.LAVA : B.AIR;
             if (id === B.ASH && hash2(x * 7 + y, z * 3 - y, 41) < 0.025) id = B.MAGMA;
           } else if (y < h - dirtDepth) {
             id = B.STONE;

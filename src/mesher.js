@@ -328,9 +328,11 @@ const commonVS = /* glsl */`
   varying float vShade;
   varying vec2 vLight;
   varying float vDist;
+  varying vec3 vWorldP;
   void main() {
     vUv = uv; vShade = aShade; vLight = aLight;
     vec3 p = position;
+    vWorldP = position;
     if (uSwayAmt > 0.0) {
       float w = aSway * uSwayAmt;
       p.x += sin(uTime * 1.8 + position.x * 0.7 + position.z * 0.4) * 0.09 * w;
@@ -353,11 +355,14 @@ const commonFS = /* glsl */`
   varying float vShade;
   varying vec2 vLight;
   varying float vDist;
+  varying vec3 vWorldP;
+  uniform vec4 uGlow;
+  float playerGlow(vec3 wp) { float d = distance(wp, uGlow.xyz); float k = clamp(1.0 - d / uGlow.w, 0.0, 1.0); return k * k * 0.75; }
   void main() {
     vec4 t = texture2D(uMap, vUv);
     if (t.a < 0.5) discard;
     vec3 sky = uSkyTint * (vLight.x * uDay);
-    vec3 torch = vec3(1.0, 0.8, 0.55) * vLight.y * 1.05;
+    vec3 torch = vec3(1.0, 0.8, 0.55) * max(vLight.y * 1.05, playerGlow(vWorldP));
     vec3 L = max(max(sky, torch), vec3(uMinLight, uMinLight, uMinLight * 1.3));
     vec3 c = t.rgb * vShade * L;
     float f = smoothstep(uFogNear, uFogFar, vDist);
@@ -446,6 +451,8 @@ const terrainFS = /* glsl */`
   varying float vAO;
   varying vec3 vTiles;
   varying float vDist;
+  uniform vec4 uGlow;
+  float playerGlow(vec3 wp) { float d = distance(wp, uGlow.xyz); float k = clamp(1.0 - d / uGlow.w, 0.0, 1.0); return k * k * 0.75; }
   vec2 tileUV(float tile, vec2 f) {
     tile = floor(tile + 0.5);
     float col = mod(tile, uAtlas.x);
@@ -464,7 +471,7 @@ const terrainFS = /* glsl */`
     float toon = ndl > 0.3 ? 1.0 : (ndl > -0.05 ? 0.84 : 0.7);
     float up = 0.88 + 0.12 * n.y;
     vec3 sky = uSkyTint * (vLight.x * uDay) * toon * up;
-    vec3 torch = vec3(1.0, 0.8, 0.55) * vLight.y * 1.05;
+    vec3 torch = vec3(1.0, 0.8, 0.55) * max(vLight.y * 1.05, playerGlow(vWorld));
     vec3 L = max(max(sky, torch), vec3(uMinLight, uMinLight, uMinLight * 1.3));
     vec3 c = t.rgb * vAO * L;
     float f = smoothstep(uFogNear, uFogFar, vDist);
@@ -499,6 +506,7 @@ export function createWorldMaterials(atlas, waterTex, info, lavaTex) {
     uFogFar: { value: 90 },
     uMinLight: { value: 0.07 },
     uSunDir: { value: new THREE.Vector3(0.3, 0.9, 0.3).normalize() },
+    uGlow: { value: new THREE.Vector4(0, -100, 0, 7) },
   };
   const terrain = new THREE.ShaderMaterial({
     uniforms: Object.assign({}, shared, { uMap: { value: atlas }, uAtlas: { value: new THREE.Vector2(info.cols, info.rows) } }),

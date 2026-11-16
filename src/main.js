@@ -1,6 +1,6 @@
 // Voxília — game bootstrap and main loop.
 import * as THREE from 'three';
-import { World, W, D, H, SEA, BIOME_NAMES, BIOME } from './world.js';
+import { World, W, D, H, SEA, HELL, BIOME_NAMES, BIOME, layerName } from './world.js';
 import { B, BLOCKS, buildAtlas, makeWaterTexture, makeLavaTexture, makeCrackTextures, SOLID, RENDER, OPAQUE } from './blocks.js';
 import { ChunkManager, createWorldMaterials } from './mesher.js';
 import { Sky } from './sky.js';
@@ -286,7 +286,9 @@ class Game {
   // ------------------------------------------------------------ helpers used by entities
   lightAt(x, y, z) {
     const l = this.world.getLight(Math.floor(x), Math.floor(y), Math.floor(z));
-    return Math.max(0.1, LCURVE[l & 15] * this.daylightFactor, LCURVE[l >> 4]);
+    const pp = this.player ? this.player.pos : null;
+    const gk = pp ? Math.max(0, 1 - Math.hypot(x - pp.x, y - pp.y - 1.2, z - pp.z) / 7) : 0;
+    return Math.max(0.1, LCURVE[l & 15] * this.daylightFactor, LCURVE[l >> 4], gk * gk * 0.75);
   }
   message(t, c) { this.ui.message(t, c); }
   addMob(m) { this.mobs.push(m); }
@@ -489,6 +491,7 @@ class Game {
     if (p.dead) return;
     const tgt = this.target;
     if (tgt.ent && tgt.ent.npc && tgt.ent.pos.distanceTo(p.pos) < 6) { this.npcTalk(false); return; }
+    if (tgt.block && tgt.block.id === B.CHEST) { this.openChest(tgt.block); return; }
     const sel = p.inv.selected;
     const it = sel ? ITEM_BY_ID[sel.id] : null;
     if (tgt.block && (tgt.block.id === B.WORKBENCH || tgt.block.id === B.FURNACE) && !(it && it.type === 'block')) { this.togglePanel(true); return; }
@@ -534,6 +537,27 @@ class Game {
       this.ui.message('O Colosso de Granito despertou!', '#ff8a5a');
       this.camShake = 0.8;
     }
+  }
+
+  openChest(b) {
+    const I = ITEMS;
+    const deep = b.y < 24;
+    const r = () => Math.random();
+    const loot = [[I.coin.id, 5 + Math.floor(r() * 12)], [I.torch.id, 8 + Math.floor(r() * 12)]];
+    const pool = deep
+      ? [[I.gold_bar, 4, 8], [I.potion, 2, 4], [I.mana_potion, 2, 3], [I.life_crystal, 1, 1], [I.crystal, 4, 9], [I.star_wand, 1, 1], [I.gold_pick, 1, 1]]
+      : [[I.copper_bar, 4, 8], [I.iron_bar, 3, 7], [I.potion, 1, 3], [I.life_crystal, 1, 1], [I.crystal, 2, 5], [I.iron_sword, 1, 1], [I.iron_pick, 1, 1], [I.glowcap, 2, 4]];
+    for (let k = 0; k < 3; k++) {
+      const [it, a, z] = pool[Math.floor(r() * pool.length)];
+      loot.push([it.id, a + Math.floor(r() * (z - a + 1))]);
+    }
+    const pos = new V(b.x + 0.5, b.y + 1.1, b.z + 0.5);
+    for (const [id, n] of loot) { const d = new Drop(this, id, n, pos.clone()); d.vel.set((Math.random() - 0.5) * 4, 5, (Math.random() - 0.5) * 4); this.drops.push(d); }
+    this.setBlock(b.x, b.y, b.z, B.CHEST_OPEN);
+    this.particles.burst(pos.x, pos.y, pos.z, [new THREE.Color('#f2c94c'), new THREE.Color('#fff2a6')], 20, 4, 0.1);
+    sfx('craft');
+    this.ui.message('Você abriu um baú!', '#f2c94c');
+    this.stats.chests = (this.stats.chests || 0) + 1;
   }
 
   // ------------------------------------------------------------ spawning
@@ -619,7 +643,8 @@ class Game {
     this.ui.update(dt);
     const hrs = (6 + this.time * 24) % 24;
     const hh = String(Math.floor(hrs)).padStart(2, '0'), mm = String(Math.floor((hrs % 1) * 6) * 10).padStart(2, '0');
-    this.ui.setInfo(`${BIOME_NAMES[this.world.biomeAt(p.pos.x, p.pos.z)]} · ${hh}:${mm} · ${this.daylightFactor < 0.45 ? 'noite' : 'dia'}`);
+    const layer = layerName(p.pos.y, this.world.height[Math.max(0, Math.min(W - 1, Math.floor(p.pos.x))) + Math.max(0, Math.min(D - 1, Math.floor(p.pos.z))) * W]);
+    this.ui.setInfo(`${layer || BIOME_NAMES[this.world.biomeAt(p.pos.x, p.pos.z)]} · ${hh}:${mm} · ${this.daylightFactor < 0.45 ? 'noite' : 'dia'}`);
     const talk = document.getElementById('btn-talk');
     const canTalk = this.npc && !this.npc.dead && this.npc.pos.distanceTo(p.pos) < 5;
     if (talk.hidden === canTalk) talk.hidden = !canTalk;
@@ -641,12 +666,23 @@ class Game {
     // underwater tint
     const camBlock = this.world.get(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y + 0.1), Math.floor(this.camera.position.z));
     const under = camBlock === B.WATER;
-    const fogCol = under ? new THREE.Color(0.08, 0.22, 0.4).multiplyScalar(0.4 + env.day * 0.6) : env.fog;
+    // depth below the surface darkens the fog; the underworld glows red
+    const cp = this.camera.position;
+    const surfY = this.world.height[Math.max(0, Math.min(W - 1, Math.floor(cp.x))) + Math.max(0, Math.min(D - 1, Math.floor(cp.z))) * W];
+    const depthK = THREE.MathUtils.smoothstep(surfY - cp.y, 4, 14);
+    const hellK = THREE.MathUtils.smoothstep(HELL + 4 - cp.y, 0, 6);
+    const fogCol = under ? new THREE.Color(0.08, 0.22, 0.4).multiplyScalar(0.4 + env.day * 0.6) : env.fog.clone();
+    if (!under && depthK > 0) fogCol.lerp(new THREE.Color(0.03, 0.025, 0.04), depthK);
+    if (!under && hellK > 0) fogCol.lerp(new THREE.Color(0.32, 0.08, 0.03), hellK);
+    this.envDepth = depthK;
     u.uFogColor.value.copy(fogCol);
-    u.uFogNear.value = under ? 2 : this.viewDist * 0.5;
-    u.uFogFar.value = under ? 18 : this.viewDist;
+    u.uFogNear.value = under ? 2 : this.viewDist * (0.5 - depthK * 0.25);
+    u.uFogFar.value = under ? 18 : this.viewDist * (1 - depthK * 0.35);
+    u.uGlow.value.set(p.pos.x, p.pos.y + 1.2, p.pos.z, 5 + depthK * 5);
+    u.uMinLight.value = 0.07 + hellK * 0.12;
     this.scene.fog.color.copy(fogCol);
     this.scene.fog.near = u.uFogNear.value; this.scene.fog.far = u.uFogFar.value;
+    this.sky.group.visible = this.envDepth < 0.98; this.sky.clouds.visible = this.envDepth < 0.98;
     this.chunks.flush(undefined, undefined, 2);
     this.chunks.updateVisibility(this.camera.position.x, this.camera.position.z, this.viewDist + 8);
     // highlight + cracks
