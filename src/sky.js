@@ -87,43 +87,40 @@ export class Sky {
   }
 
   buildClouds() {
+    // soft puffy clouds: clusters of low-poly spheres, flat bottoms, baked top-lit shading
     const rnd = mulberry32(1234);
     const pos = [], col = [], idx = [];
-    const box = (x0, y0, z0, w, h, d) => {
-      const faces = [
-        [[1, 1, 1], [1, 1, 0], [1, 0, 0], [1, 0, 1], 0.86], [[0, 1, 0], [0, 1, 1], [0, 0, 1], [0, 0, 0], 0.86],
-        [[0, 1, 0], [1, 1, 0], [1, 1, 1], [0, 1, 1], 1.0], [[0, 0, 1], [1, 0, 1], [1, 0, 0], [0, 0, 0], 0.7],
-        [[0, 1, 1], [1, 1, 1], [1, 0, 1], [0, 0, 1], 0.92], [[1, 1, 0], [0, 1, 0], [0, 0, 0], [1, 0, 0], 0.8],
-      ];
-      for (const f of faces) {
-        const base = pos.length / 3;
-        for (let k = 0; k < 4; k++) {
-          const c = f[k];
-          pos.push(x0 + c[0] * w, y0 + c[1] * h, z0 + c[2] * d);
-          const s = f[4] * (c[1] ? 1 : 0.9);
-          col.push(s, s, Math.min(1, s * 1.04));
-        }
-        idx.push(base, base + 3, base + 2, base, base + 2, base + 1);
+    const ico = new THREE.IcosahedronGeometry(1, 2);
+    const ip = ico.attributes.position, ii = ico.index ? ico.index.array : null;
+    const puff = (cx, cy, cz, rx, ry, rz) => {
+      const base = pos.length / 3;
+      for (let i = 0; i < ip.count; i++) {
+        const x = ip.getX(i), y = ip.getY(i), z = ip.getZ(i);
+        const yy = Math.max(y, -0.35);
+        pos.push(cx + x * rx, cy + yy * ry, cz + z * rz);
+        const s = 0.74 + 0.26 * Math.max(0, (yy + 0.35) / 1.35);
+        col.push(s, s, Math.min(1, s * 1.05));
       }
+      if (ii) for (let i = 0; i < ii.length; i++) idx.push(base + ii[i]);
+      else for (let i = 0; i < ip.count; i++) idx.push(base + i);
     };
-    this.cloudSpan = 520;
-    for (let i = 0; i < 34; i++) {
-      const cx = (rnd() - 0.5) * this.cloudSpan, cz = (rnd() - 0.5) * this.cloudSpan, cy = 105 + rnd() * 30;
-      const n = 5 + Math.floor(rnd() * 8);
-      const spread = 10 + rnd() * 14;
+    this.cloudSpan = 560;
+    for (let i = 0; i < 30; i++) {
+      const cx = (rnd() - 0.5) * this.cloudSpan, cz = (rnd() - 0.5) * this.cloudSpan, cy = 150 + rnd() * 30;
+      const n = 4 + Math.floor(rnd() * 6);
+      const spread = 12 + rnd() * 16;
       for (let k = 0; k < n; k++) {
-        const w = 6 + rnd() * 12, d = 6 + rnd() * 12;
         const ox = (rnd() - 0.5) * spread * 2, oz = (rnd() - 0.5) * spread;
         const fall = 1 - Math.min(1, Math.hypot(ox / spread, oz / spread));
-        const h = 3 + fall * 8 + rnd() * 3;
-        box(cx + ox - w / 2, cy, cz + oz - d / 2, w, h, d);
+        const r = 6 + fall * 9 + rnd() * 4;
+        puff(cx + ox, cy, cz + oz, r * 1.2, r * 0.8, r);
       }
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     g.setIndex(idx);
-    this.cloudMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, transparent: true, opacity: 0.93 });
+    this.cloudMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
     this.clouds = new THREE.Mesh(g, this.cloudMat);
     this.clouds.frustumCulled = false;
     this.clouds.renderOrder = -5;

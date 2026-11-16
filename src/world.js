@@ -1,10 +1,12 @@
 // Voxel world storage, procedural generation and lighting.
 import { Simplex, mulberry32, hash2 } from './noise.js';
-import { B, OPAQUE, SOLID, FILTER, EMIT } from './blocks.js';
+import { B, OPAQUE, SOLID, FILTER, EMIT, RENDER, SMOOTH } from './blocks.js';
 
-export const W = 192, D = 192, H = 80, SEA = 28, CH = 16;
-export const BIOME = { MEADOW: 0, SNOW: 1, DESERT: 2, PRISM: 3, OCEAN: 4, BEACH: 5 };
-export const BIOME_NAMES = ['Campos Verdes', 'Picos Gelados', 'Dunas Douradas', 'Clareira Prismática', 'Oceano', 'Praia'];
+export const W = 192, D = 192, H = 112, SEA = 56, CH = 16;
+export const HELL = 22; // top of the underworld layer
+export const BIOME = { MEADOW: 0, SNOW: 1, DESERT: 2, PRISM: 3, OCEAN: 4, BEACH: 5, SHADOW: 6 };
+export const BIOME_NAMES = ['Campos Verdes', 'Picos Gelados', 'Dunas Douradas', 'Clareira Prismática', 'Oceano', 'Praia', 'Ermo Sombrio'];
+export function layerName(y, h) { if (y < HELL) return 'Submundo'; if (y < h - 22) return 'Cavernas Profundas'; if (y < h - 6) return 'Subterrâneo'; return null; }
 
 const QSIZE = 1 << 22;
 const queue = new Int32Array(QSIZE);
@@ -18,6 +20,8 @@ export class World {
     this.light = new Uint8Array(W * D * H);
     this.biome = new Uint8Array(W * D);
     this.height = new Uint8Array(W * D);
+    this.surf = new Float32Array(W * D); // continuous visual surface height (0 = use blocks)
+    this.forest = new Float32Array(W * D);
     this.edits = new Map();
     this.spawn = { x: W / 2, y: 40, z: D / 2 };
     this.hut = null;
@@ -62,13 +66,12 @@ export class World {
         const dx = x - cx, dz = z - cz;
         const r = Math.hypot(dx, dz) / (W / 2);
         const ang = Math.atan2(dz, dx) + n.noise2(x * 0.008, z * 0.008) * 0.9;
-        let wS = Math.max(0, Math.cos(ang + Math.PI / 2)) ** 3; // north (-z)
-        let wD = Math.max(0, Math.cos(ang)) ** 3; // east
-        let wP = Math.max(0, Math.cos(ang - Math.PI / 2)) ** 3; // south
-        let wM = Math.max(0, Math.cos(ang - Math.PI)) ** 3; // west
-        wM += 5 * (1 - smooth(0.1, 0.3, r));
-        const sum = wS + wD + wP + wM;
-        wS /= sum; wD /= sum; wP /= sum; wM /= sum;
+        // five sectors around the island: snow N, desert E, prism SE, shadow SW, meadow W + centre
+        const sec = (c) => Math.max(0, Math.cos(ang - c)) ** 4;
+        let wS = sec(-Math.PI / 2), wD = sec(0.15), wP = sec(1.35), wX = sec(2.45), wM = sec(Math.PI + 0.5) + sec(-2.3) * 0.8;
+        wM += 6 * (1 - smooth(0.12, 0.34, r));
+        const sum = wS + wD + wP + wM + wX;
+        wS /= sum; wD /= sum; wP /= sum; wM /= sum; wX /= sum;
 
         const coast = r + n.fbm2(x * 0.02, z * 0.02, 3) * 0.14;
         const land = 1 - smooth(0.6, 0.86, coast);
@@ -77,15 +80,20 @@ export class World {
         const hS = SEA + 3 + n2.ridged2(x * 0.024, z * 0.024, 4) * 30 - 6 + n.fbm2(x * 0.05, z * 0.05, 2) * 2;
         const hD = SEA + 3 + (1 - Math.abs(n3.noise2(x * 0.06, z * 0.025))) * 4 + n.fbm2(x * 0.02, z * 0.02, 2) * 2;
         const hP = SEA + 5 + n3.fbm2(x * 0.03, z * 0.03, 4) * 7;
-        const hLand = wM * hM + wS * hS + wD * hD + wP * hP;
+        const hX = SEA + 4 + n.fbm2(x * 0.035 + 40, z * 0.035, 3) * 8 - Math.abs(n2.noise2(x * 0.03, z * 0.03)) * 5;
+        const hLand = wM * hM + wS * hS + wD * hD + wP * hP + wX * hX;
         const floor = SEA - 4 - (1 - land) * 9 + n2.noise2(x * 0.05, z * 0.05) * 2;
-        let h = floor + (hLand - floor) * smooth(0, 1, land * 1.15);
-        h = Math.max(4, Math.min(H - 14, Math.floor(h)));
+        let hf = floor + (hLand - floor) * smooth(0, 1, land * 1.15);
+        hf = Math.max(4, Math.min(H - 14.01, hf));
+        let h = Math.floor(hf);
+        this.surf[x + z * W] = hf + 0.5;
+        this.forest[x + z * W] = n3.fbm2(x * 0.018 + 300, z * 0.018, 2);
 
         let biome = BIOME.MEADOW, best = wM;
         if (wS > best) { best = wS; biome = BIOME.SNOW; }
         if (wD > best) { best = wD; biome = BIOME.DESERT; }
         if (wP > best) { best = wP; biome = BIOME.PRISM; }
+        if (wX > best) { best = wX; biome = BIOME.SHADOW; }
         if (h < SEA) biome = BIOME.OCEAN;
         else if (h <= SEA + 1 && coast > 0.5 && biome !== BIOME.SNOW) biome = BIOME.BEACH;
         this.biome[x + z * W] = biome;
@@ -94,16 +102,22 @@ export class World {
         const dirtDepth = 3 + Math.floor(hash2(x, z, 5) * 2);
         for (let y = 0; y < H; y++) {
           let id = B.AIR;
-          if (y === 0 || (y < 3 && hash2(x * 3 + y, z, 11) < 0.5)) id = B.BEDROCK;
-          else if (y < h - dirtDepth) {
+          if (y === 0 || (y < 2 && hash2(x * 3 + y, z, 11) < 0.5)) id = B.BEDROCK;
+          else if (y < HELL + 2) {
+            id = B.ASH;
+            const c0 = 5 + n.noise2(x * 0.05, z * 0.05) * 2, c1 = HELL - 4 + n2.noise2(x * 0.06, z * 0.06) * 3;
+            if (y > c0 && y < c1) id = y <= 6 ? B.LAVA : B.AIR;
+            if (id === B.ASH && hash2(x * 7 + y, z * 3 - y, 41) < 0.025) id = B.MAGMA;
+          } else if (y < h - dirtDepth) {
             id = B.STONE;
             if (biome === BIOME.PRISM && y > h - 16) id = B.MOONSTONE;
+            if (biome === BIOME.SHADOW && y > h - 14) id = B.SHADOW_STONE;
             if (biome === BIOME.DESERT && y > h - 9) id = B.SANDSTONE;
           } else if (y < h) {
-            id = { 0: B.DIRT, 1: B.SNOW, 2: B.SAND, 3: B.DIRT, 4: B.SAND, 5: B.SAND }[biome];
+            id = { 0: B.DIRT, 1: B.SNOW, 2: B.SAND, 3: B.DIRT, 4: B.SAND, 5: B.SAND, 6: B.DIRT }[biome];
             if (biome === BIOME.SNOW && y < h - 2) id = B.DIRT;
           } else if (y === h) {
-            id = { 0: B.GRASS, 1: B.SNOWY_DIRT, 2: B.SAND, 3: B.PRISM_GRASS, 4: B.SAND, 5: B.SAND }[biome];
+            id = { 0: B.GRASS, 1: B.SNOWY_DIRT, 2: B.SAND, 3: B.PRISM_GRASS, 4: B.SAND, 5: B.SAND, 6: B.SHADOW_GRASS }[biome];
             if (biome === BIOME.OCEAN && hash2(x, z, 8) < 0.3) id = B.DIRT;
             if (biome === BIOME.SNOW && h > SEA + 18) id = B.SNOW;
           } else if (y <= SEA) {
@@ -122,18 +136,35 @@ export class World {
         const h = this.height[x + z * W];
         const wet = h <= SEA + 2;
         const top = wet ? h - 6 : h - 1;
-        for (let y = 3; y < top; y++) {
+        for (let y = HELL + 3; y < top; y++) {
           const i = x + W * (z + D * y);
           const id = BL[i];
           if (id === B.BEDROCK || id === B.WATER) continue;
           const a = n.noise3(x * 0.045, y * 0.075, z * 0.045);
           const b = n2.noise3(x * 0.045, y * 0.075, z * 0.045);
           let cave = a * a + b * b < 0.006 && (y < h - 3 || hash2(x, z, 77) < 0.6);
-          if (!cave && y < h - 8 && y > 5) cave = n3.noise3(x * 0.03, y * 0.06, z * 0.03) > 0.58;
+          if (!cave && y < h - 8 && y > HELL + 4) cave = n3.noise3(x * 0.03, y * 0.06, z * 0.03) > 0.58;
           if (cave) BL[i] = y < 7 ? B.AIR : B.AIR;
         }
       }
       if (z % 24 === 0) await tick(0.28 + (z / D) * 0.3, 'Escavando cavernas');
+    }
+
+    // Ruby pillars connecting layers: a few big vertical shafts down to the underworld
+    for (let k = 0; k < 6; k++) {
+      let x = 20 + rnd() * (W - 40), z = 20 + rnd() * (D - 40);
+      const top = this.height[(x | 0) + (z | 0) * W] - 8;
+      for (let y = top; y > HELL - 2; y--) {
+        x += (rnd() - 0.5) * 1.2; z += (rnd() - 0.5) * 1.2;
+        const r = 1.6 + rnd() * 0.8;
+        for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+          if (dx * dx + dz * dz > r * r) continue;
+          const xx = (x | 0) + dx, zz = (z | 0) + dz;
+          if (xx < 1 || zz < 1 || xx >= W - 1 || zz >= D - 1) continue;
+          const i = this.idx(xx, y, zz);
+          if (BL[i] !== B.BEDROCK && BL[i] !== B.WATER && BL[i] !== B.LAVA) BL[i] = B.AIR;
+        }
+      }
     }
 
     // Ores
@@ -149,18 +180,19 @@ export class World {
         }
       }
     };
-    vein(B.COPPER_ORE, 260, 6, SEA + 14, 8, [B.STONE, B.SANDSTONE]);
-    vein(B.IRON_ORE, 180, 4, SEA + 4, 7, [B.STONE]);
-    vein(B.GOLD_ORE, 90, 3, SEA - 6, 6, [B.STONE]);
-    vein(B.CRYSTAL_ORE, 320, 4, H - 20, 6, [B.MOONSTONE]);
-    vein(B.CRYSTAL_ORE, 30, 3, SEA - 8, 5, [B.STONE]);
+    vein(B.COPPER_ORE, 420, HELL + 4, SEA + 14, 8, [B.STONE, B.SANDSTONE]);
+    vein(B.IRON_ORE, 320, HELL + 3, SEA, 7, [B.STONE]);
+    vein(B.GOLD_ORE, 200, HELL + 2, SEA - 14, 6, [B.STONE]);
+    vein(B.EMBER_ORE, 260, 2, HELL + 2, 7, [B.ASH]);
+    vein(B.CRYSTAL_ORE, 320, HELL, H - 20, 6, [B.MOONSTONE]);
+    vein(B.CRYSTAL_ORE, 50, HELL + 2, SEA - 14, 5, [B.STONE]);
 
     // Floating islands
     await tick(0.66, 'Erguendo ilhas no céu');
     for (let k = 0; k < 5; k++) {
       const a = rnd() * Math.PI * 2, rr = 15 + rnd() * 45;
       const ix = Math.floor(cx + Math.cos(a) * rr), iz = Math.floor(cz + Math.sin(a) * rr);
-      const iy = 60 + Math.floor(rnd() * 8), R = 5 + rnd() * 4;
+      const iy = SEA + 34 + Math.floor(rnd() * 8), R = 5 + rnd() * 4;
       const prism = this.biomeAt(ix, iz) === BIOME.PRISM;
       for (let dz = -Math.ceil(R); dz <= R; dz++) for (let dx = -Math.ceil(R); dx <= R; dx++) {
         const d = Math.hypot(dx, dz) + n.noise2((ix + dx) * 0.3, (iz + dz) * 0.3) * 1.3;
@@ -191,9 +223,21 @@ export class World {
       if (this.hut && Math.abs(x - this.hut.x) < 9 && Math.abs(z - this.hut.z) < 9) continue;
       const r = hash2(x, z, 1234);
       const r2 = hash2(x, z, 4321);
+      const fo = this.forest[x + z * W];
+      const treeP = fo > 0.15 ? 0.045 : fo > 0 ? 0.012 : 0.003;
       if (bio === BIOME.MEADOW && top === B.GRASS) {
-        if (r < 0.018) { if (r2 < 0.3) this.tallTree(x, h + 1, z, rnd); else this.oak(x, h + 1, z, rnd); }
-        else if (r < 0.5) this.rawSet(x, h + 1, z, r2 < 0.05 ? B.FLOWER_RED : r2 < 0.1 ? B.FLOWER_YELLOW : r2 < 0.115 ? B.MUSHROOM : B.TALL_GRASS);
+        if (r < treeP) { if (r2 < 0.65) this.tallTree(x, h + 1, z, rnd); else this.oak(x, h + 1, z, rnd); }
+        else if (r < 0.34) {
+          let f = B.TALL_GRASS;
+          const fl = hash2(Math.floor(x / 5), Math.floor(z / 5), 77); // flowers grow in patches
+          if (r2 < 0.22 * fl) f = [B.FLOWER_YELLOW, B.FLOWER_RED, B.FLOWER_BLUE, B.FLOWER_PURPLE][Math.floor(fl * 40) % 4];
+          else if (r2 > 0.985) f = B.MUSHROOM;
+          else if (r2 > 0.97) f = B.FLOWER_PURPLE;
+          this.rawSet(x, h + 1, z, f);
+        }
+      } else if (bio === BIOME.SHADOW && top === B.SHADOW_GRASS) {
+        if (r < treeP * 0.8) this.shadowTree(x, h + 1, z, rnd);
+        else if (r < 0.22) this.rawSet(x, h + 1, z, r2 < 0.2 ? B.SHADOW_SHROOM : B.SHADOW_THORN);
       } else if (bio === BIOME.SNOW && (top === B.SNOWY_DIRT || top === B.SNOW)) {
         if (r < 0.03) this.pine(x, h + 1, z, rnd);
         else if (r < 0.04) this.rawSet(x, h + 1, z, B.DEAD_BUSH);
@@ -203,15 +247,26 @@ export class World {
       } else if (bio === BIOME.PRISM && top === B.PRISM_GRASS) {
         if (r < 0.026) this.prismTree(x, h + 1, z, rnd);
         else if (r < 0.03) { this.rawSet(x, h + 1, z, B.CRYSTAL_ORE); }
-        else if (r < 0.32) this.rawSet(x, h + 1, z, r2 < 0.35 ? B.PRISM_TUFT : r2 < 0.42 ? B.FLOWER_YELLOW : B.TALL_GRASS);
+        else if (r < 0.3) this.rawSet(x, h + 1, z, r2 < 0.3 ? B.PRISM_TUFT : r2 < 0.42 ? B.FLOWER_YELLOW : r2 < 0.5 ? B.FLOWER_BLUE : B.TALL_GRASS);
       } else if (bio === BIOME.BEACH && top === B.SAND && r < 0.004) {
         this.tallTree(x, h + 1, z, rnd);
       }
     }
+    // Treasure chests in caves and the underworld
+    this.chests = [];
+    for (let k = 0, placed = 0; k < 30000 && placed < 46; k++) {
+      const x = 2 + Math.floor(rnd() * (W - 4)), z = 2 + Math.floor(rnd() * (D - 4));
+      const deep = rnd() < 0.2;
+      const y = deep ? 7 + Math.floor(rnd() * 10) : HELL + 3 + Math.floor(rnd() * (this.height[x + z * W] - HELL - 10));
+      if (BL[this.idx(x, y, z)] === B.AIR && BL[this.idx(x, y + 1, z)] === B.AIR && SOLID[BL[this.idx(x, y - 1, z)]]) {
+        this.rawSet(x, y, z, B.CHEST);
+        placed++;
+      }
+    }
     // Cave flora
-    for (let k = 0; k < 4000; k++) {
+    for (let k = 0; k < 6000; k++) {
       const x = 1 + Math.floor(rnd() * (W - 2)), z = 1 + Math.floor(rnd() * (D - 2));
-      const y = 4 + Math.floor(rnd() * (this.height[x + z * W] - 8));
+      const y = HELL + 2 + Math.floor(rnd() * (this.height[x + z * W] - HELL - 8));
       if (BL[this.idx(x, y, z)] === B.AIR && SOLID[BL[this.idx(x, y - 1, z)]] && BL[this.idx(x, y - 1, z)] !== B.WATER) {
         this.rawSet(x, y, z, rnd() < 0.7 ? B.GLOWCAP : B.MUSHROOM);
       }
@@ -233,6 +288,28 @@ export class World {
       for (let y = Math.min(h, base) - 3; y <= base; y++) this.rawSet(x, y, z, y === base ? B.GRASS : y > base - 3 ? B.DIRT : B.STONE);
       for (let y = base + 1; y < base + 12; y++) this.rawSet(x, y, z, B.AIR);
       this.height[x + z * W] = base;
+      this.surf[x + z * W] = base + 1;
+    }
+    // blend the plateau into the surrounding hills
+    for (let dz = -hz - 8; dz <= hz + 8; dz++) for (let dx = -hx - 8; dx <= hx + 8; dx++) {
+      const d = Math.max(Math.abs(dx) - (hx + 2), Math.abs(dz) - (hz + 2));
+      if (d <= 0) continue;
+      const x = x0 + dx, z = z0 + dz;
+      if (x < 1 || z < 1 || x >= W - 1 || z >= D - 1) continue;
+      const k = x + z * W;
+      const S0 = this.surf[k] || this.height[k] + 1;
+      if (this.height[k] < SEA) continue;
+      const t = Math.min(1, d / 6), tt = t * t * (3 - 2 * t);
+      const S = (base + 1) * (1 - tt) + S0 * tt;
+      const nh = Math.floor(S - 0.5);
+      const top = this.get(x, this.height[k], z);
+      for (let y = Math.min(nh, this.height[k]) - 2; y <= Math.max(nh, this.height[k]) + 1; y++) {
+        const cur = this.get(x, y, z);
+        if (y <= nh) { if (y === nh) this.rawSet(x, y, z, top === B.SAND ? B.SAND : B.GRASS); else if (!SMOOTH[cur] || y >= nh - 2) this.rawSet(x, y, z, B.DIRT); }
+        else if (SMOOTH[cur] || RENDER[cur] === 2) this.rawSet(x, y, z, B.AIR);
+      }
+      this.height[k] = nh;
+      this.surf[k] = S;
     }
     const fy = base + 1;
     for (let dz = -hz; dz <= hz; dz++) for (let dx = -hx; dx <= hx; dx++) {
@@ -279,35 +356,55 @@ export class World {
   placeLeaf(x, y, z, id) {
     if (!this.inside(x, y, z)) return;
     const i = this.idx(x, y, z), c = this.blocks[i];
-    if (c === B.AIR || c === B.TALL_GRASS || c === B.FLOWER_RED || c === B.FLOWER_YELLOW || c === B.PRISM_TUFT) this.blocks[i] = id;
+    if (c === B.AIR || (RENDER[c] === 2)) this.blocks[i] = id;
   }
   oak(x, y, z, rnd) {
     const th = 4 + Math.floor(rnd() * 3);
     for (let i = 0; i < th; i++) this.rawSet(x, y + i, z, B.LOG);
-    const cy = y + th - 1, R = 2.3 + rnd() * 0.8;
-    for (let dy = -2; dy <= 2; dy++) for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) {
-      const d = Math.hypot(dx, dy * 1.3, dz);
-      if (d < R + hash2(x + dx * 7, z + dz * 13 + dy * 3, 9) * 0.8 - 0.3) this.placeLeaf(x + dx, cy + dy + 1, z + dz, B.LEAVES);
-    }
-  }
-  tallTree(x, y, z, rnd) {
-    const th = 9 + Math.floor(rnd() * 5);
-    for (let i = 0; i < th; i++) this.rawSet(x, y + i, z, B.LOG);
-    const layer = (cy, R, thick) => {
-      for (let dy = 0; dy < thick; dy++) for (let dz = -4; dz <= 4; dz++) for (let dx = -4; dx <= 4; dx++) {
-        const d = Math.hypot(dx, dz);
-        if (d < R - dy * 0.6 + hash2(x + dx, z + dz + dy, 21) * 0.7) {
-          this.placeLeaf(x + dx, cy + dy, z + dz, B.DARK_LEAVES);
-          if (dy === 0 && d > R - 1.2 && hash2(x + dx, z + dz, 55) < 0.35) { // hanging vines
-            const len = 1 + Math.floor(hash2(x + dx, z + dz, 56) * 3);
-            for (let v = 1; v <= len; v++) this.placeLeaf(x + dx, cy - v, z + dz, B.DARK_LEAVES);
-          }
-        }
+    const slab = (cy, R, t, ox, oz) => {
+      for (let dy = 0; dy < t; dy++) for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) {
+        if (Math.abs(dx) === R && Math.abs(dz) === R) continue; // clipped corners
+        this.placeLeaf(x + dx + ox, cy + dy, z + dz + oz, B.LEAVES);
       }
     };
-    layer(y + th - 1, 3.6, 2);
-    if (th > 10) layer(y + th - 5, 2.4, 1);
-    this.placeLeaf(x, y + th + 1, z, B.DARK_LEAVES);
+    slab(y + th - 1, 2, 2, 0, 0);
+    slab(y + th + 1, 1, 1, 0, 0);
+  }
+  tallTree(x, y, z, rnd) {
+    const th = 9 + Math.floor(rnd() * 7);
+    for (let i = 0; i < th; i++) this.rawSet(x, y + i, z, B.LOG);
+    const slab = (cy, Rx, Rz, t, ox, oz) => {
+      for (let dy = 0; dy < t; dy++) for (let dz = -Rz; dz <= Rz; dz++) for (let dx = -Rx; dx <= Rx; dx++) {
+        if (Math.abs(dx) === Rx && Math.abs(dz) === Rz && hash2(x + dx, z + dz, cy) < 0.7) continue;
+        this.placeLeaf(x + dx + ox, cy + dy, z + dz + oz, B.DARK_LEAVES);
+      }
+    };
+    // big flat canopy made of stacked, slightly offset slabs
+    const R = 3 + Math.floor(rnd() * 2);
+    slab(y + th - 2, R, R - (rnd() < 0.5 ? 1 : 0), 2, 0, 0);
+    slab(y + th, R - 1, R - 1, 1, Math.floor(rnd() * 3) - 1, Math.floor(rnd() * 3) - 1);
+    if (rnd() < 0.6) slab(y + th + 1, 1, 1, 1, 0, 0);
+    // side branches with small leaf boxes lower on the trunk
+    const nb = Math.floor(rnd() * 3);
+    for (let k = 0; k < nb; k++) {
+      const by = y + Math.floor(th * (0.45 + rnd() * 0.3));
+      const [dx, dz] = [[1, 0], [-1, 0], [0, 1], [0, -1]][Math.floor(rnd() * 4)];
+      this.placeLeaf(x + dx, by, z + dz, B.LOG);
+      for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) for (let c = 0; c < 2; c++) this.placeLeaf(x + dx * 2 + a * (dx || 1) - (dx ? 0 : 0), by + b, z + dz * 2 + c * (dz || 1), B.DARK_LEAVES);
+    }
+  }
+  shadowTree(x, y, z, rnd) {
+    const th = 6 + Math.floor(rnd() * 6);
+    for (let i = 0; i < th; i++) this.rawSet(x, y + i, z, B.SHADOW_LOG);
+    // thorny dead branches in a V shape plus a few purple leaf clumps
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      if (rnd() < 0.35) continue;
+      let bx = x, bz = z;
+      const by0 = y + th - 1 - Math.floor(rnd() * 3);
+      for (let k = 1; k <= 3; k++) { bx += dx; bz += dz; this.placeLeaf(bx, by0 + k, bz, B.SHADOW_LOG); }
+      if (rnd() < 0.6) for (let a = -1; a <= 0; a++) for (let b = 0; b < 2; b++) this.placeLeaf(bx + a, by0 + 4 + b, bz, B.SHADOW_LEAVES);
+    }
+    this.placeLeaf(x, y + th, z, B.SHADOW_LEAVES);
   }
   pine(x, y, z, rnd) {
     const th = 7 + Math.floor(rnd() * 5);
@@ -415,6 +512,7 @@ export class World {
     if (old === id) return null;
     this.blocks[i] = id;
     if (record) this.edits.set(i, id);
+    if ((SMOOTH[old] || SMOOTH[id]) && y >= this.height[x + z * W] - 1) this.surf[x + z * W] = 0;
     const R = 15;
     const ax0 = Math.max(0, x - R), ax1 = Math.min(W - 1, x + R), az0 = Math.max(0, z - R), az1 = Math.min(D - 1, z + R);
     // snapshot old light to find what changed
@@ -441,6 +539,26 @@ export class World {
   }
 
   applyEdits(list) {
-    for (const [i, id] of list) { this.blocks[i] = id; this.edits.set(i, id); }
+    for (const [i, id] of list) {
+      const old = this.blocks[i];
+      this.blocks[i] = id; this.edits.set(i, id);
+      const x = i % W, t = (i / W) | 0, z = t % D, y = (t / D) | 0;
+      if ((SMOOTH[old] || SMOOTH[id]) && y >= this.height[x + z * W] - 1) this.surf[x + z * W] = 0;
+    }
+  }
+  // Visual ground offset at a point: difference between smooth surface and block top (for feet/props)
+  groundOffset(px, pz, footY) {
+    const fx = px - 0.5, fz = pz - 0.5;
+    const x0 = Math.floor(fx), z0 = Math.floor(fz), tx = fx - x0, tz = fz - z0;
+    let acc = 0, wsum = 0;
+    for (let k = 0; k < 4; k++) {
+      const x = x0 + (k & 1), z = z0 + (k >> 1);
+      if (x < 0 || z < 0 || x >= W || z >= D) continue;
+      const S = this.surf[x + z * W], h = this.height[x + z * W];
+      if (!S || Math.abs(h + 1 - footY) > 1.01) continue;
+      const w = ((k & 1) ? tx : 1 - tx) * ((k >> 1) ? tz : 1 - tz);
+      acc += (S - footY) * w; wsum += w;
+    }
+    return wsum > 0.3 ? Math.max(-0.6, Math.min(0.6, acc / wsum)) : 0;
   }
 }

@@ -22,7 +22,8 @@ export function moveBody(world, b, dt) {
   const maxD = Math.max(Math.abs(b.vel.x), Math.abs(b.vel.y), Math.abs(b.vel.z)) * dt;
   const steps = Math.max(1, Math.ceil(maxD / 0.3));
   const sdt = dt / steps;
-  b.onGround = false; b.hitWall = false; b.hitCeil = false;
+  b.wasGround = b.onGround;
+  b.onGround = false; b.hitWall = false; b.hitCeil = false; b.stepped = false;
   for (let s = 0; s < steps; s++) {
     // Y
     let ny = b.pos.y + b.vel.y * sdt;
@@ -34,8 +35,10 @@ export function moveBody(world, b, dt) {
       b.vel.y = 0;
     }
     b.pos.y = ny;
+    const grounded = b.onGround || b.wasGround;
     // X
     let nx = b.pos.x + b.vel.x * sdt;
+    if (b.step && grounded && overlaps(world, nx, b.pos.y, b.pos.z, hw, b.h) && !overlaps(world, nx, b.pos.y + 1.02, b.pos.z, hw, b.h)) { b.pos.y += 1.02; b.stepped = true; }
     if (overlaps(world, nx, b.pos.y, b.pos.z, hw, b.h)) {
       if (b.vel.x > 0) nx = Math.floor(nx + hw) - hw - 0.001; else nx = Math.floor(nx - hw) + 1 + hw + 0.001;
       if (overlaps(world, nx, b.pos.y, b.pos.z, hw, b.h)) nx = b.pos.x;
@@ -44,6 +47,7 @@ export function moveBody(world, b, dt) {
     b.pos.x = nx;
     // Z
     let nz = b.pos.z + b.vel.z * sdt;
+    if (b.step && grounded && overlaps(world, b.pos.x, b.pos.y, nz, hw, b.h) && !overlaps(world, b.pos.x, b.pos.y + 1.02, nz, hw, b.h)) { b.pos.y += 1.02; b.stepped = true; }
     if (overlaps(world, b.pos.x, b.pos.y, nz, hw, b.h)) {
       if (b.vel.z > 0) nz = Math.floor(nz + hw) - hw - 0.001; else nz = Math.floor(nz - hw) + 1 + hw + 0.001;
       if (overlaps(world, b.pos.x, b.pos.y, nz, hw, b.h)) nz = b.pos.z;
@@ -52,7 +56,10 @@ export function moveBody(world, b, dt) {
     b.pos.z = nz;
   }
   if (!b.onGround && b.vel.y <= 0 && overlaps(world, b.pos.x, b.pos.y - 0.02, b.pos.z, hw, b.h)) b.onGround = true;
-  b.inWater = world.get(Math.floor(b.pos.x), Math.floor(b.pos.y + b.h * 0.4), Math.floor(b.pos.z)) === B.WATER;
+  const mid = world.get(Math.floor(b.pos.x), Math.floor(b.pos.y + b.h * 0.4), Math.floor(b.pos.z));
+  const feet = world.get(Math.floor(b.pos.x), Math.floor(b.pos.y + 0.1), Math.floor(b.pos.z));
+  b.inWater = mid === B.WATER || mid === B.LAVA;
+  b.inLava = mid === B.LAVA || feet === B.LAVA;
   b.headInWater = world.get(Math.floor(b.pos.x), Math.floor(b.pos.y + b.h * 0.9), Math.floor(b.pos.z)) === B.WATER;
 }
 

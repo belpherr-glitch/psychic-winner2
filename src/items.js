@@ -139,6 +139,8 @@ const blockItems = [
   ['pale_log', B.PALE_LOG], ['brick', B.BRICK], ['workbench', B.WORKBENCH], ['torch', B.TORCH], ['cactus', B.CACTUS],
   ['sandstone', B.SANDSTONE], ['furnace', B.FURNACE], ['flower_red', B.FLOWER_RED], ['flower_yellow', B.FLOWER_YELLOW],
   ['mushroom', B.MUSHROOM], ['glowcap', B.GLOWCAP], ['cloud', B.CLOUD],
+  ['ash', B.ASH], ['ember_ore', B.EMBER_ORE], ['magma', B.MAGMA], ['shadow_stone', B.SHADOW_STONE], ['shadow_log', B.SHADOW_LOG],
+  ['flower_blue', B.FLOWER_BLUE], ['flower_purple', B.FLOWER_PURPLE], ['shadow_shroom', B.SHADOW_SHROOM],
 ];
 for (const [k, b] of blockItems) item(k, { block: b, type: 'block', name: BLOCKS[b].name });
 
@@ -221,6 +223,7 @@ const I = ITEMS;
 export const RECIPES = [
   { out: [I.planks, 4], in: [[I.log, 1]], station: null },
   { out: [I.planks, 4], in: [[I.pale_log, 1]], station: null },
+  { out: [I.planks, 4], in: [[I.shadow_log, 1]], station: null },
   { out: [I.workbench, 1], in: [[I.planks, 8]], station: null },
   { out: [I.torch, 4], in: [[I.planks, 1], [I.gel, 1]], station: null },
   { out: [I.torch, 2], in: [[I.planks, 1], [I.crystal, 1]], station: null },

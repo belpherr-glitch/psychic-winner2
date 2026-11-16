@@ -46,7 +46,8 @@ class Buf {
 }
 
 export function buildChunk(world, ccx, ccz, faceUV, faceTile) {
-  const op = new Buf(false), cr = new Buf(true), wa = new Buf(true);
+  const op = new Buf(false), cr = new Buf(true), wa = new Buf(true), la = new Buf(true);
+  const wa0 = wa;
   const x0 = ccx * CH, z0 = ccz * CH;
   const BL = world.blocks, LT = world.light;
   const get = (x, y, z) => world.get(x, y, z);
@@ -75,9 +76,10 @@ export function buildChunk(world, ccx, ccz, faceUV, faceTile) {
             const uv = uvs[f.slot];
             const base = op.n;
             const ao = [0, 0, 0, 0];
+            const sinkBelow = SMOOTH[get(x, y - 1, z)] ? 0.6 : 0;
             for (let k = 0; k < 4; k++) {
               const c = f.c[k];
-              op.pos.push(x + c[0], y + c[1], z + c[2]);
+              op.pos.push(x + c[0], y + c[1] - (c[1] === 0 ? sinkBelow : 0), z + c[2]);
               const nb = f.nb[k];
               const o1 = OPAQUE[get(x + nb[0][0], y + nb[0][1], z + nb[0][2])];
               const o2 = OPAQUE[get(x + nb[1][0], y + nb[1][1], z + nb[1][2])];
@@ -105,12 +107,14 @@ export function buildChunk(world, ccx, ccz, faceUV, faceTile) {
           const ls = LCURVE[l & 15], lb = LCURVE[l >> 4];
           const jx = (hash2(x, z, y) - 0.5) * 0.3, jz = (hash2(z, x, y + 9) - 0.5) * 0.3;
           const hgt = 0.85 + hash2(x + 3, z, y) * 0.3;
+          const gS = world.surf[x + z * W];
+          const gy = gS && world.height[x + z * W] === y - 1 ? Math.max(-0.6, Math.min(0.6, gS - y)) : 0;
           const a = 0.12, b = 0.88;
           const quads = [[[a, a], [b, b]], [[a, b], [b, a]]];
           for (const [p, q] of quads) {
             const base = cr.n;
             const px0 = x + p[0] + jx, pz0 = z + p[1] + jz, px1 = x + q[0] + jx, pz1 = z + q[1] + jz;
-            cr.pos.push(px0, y + hgt - 0.08, pz0, px1, y + hgt - 0.08, pz1, px1, y - 0.08, pz1, px0, y - 0.08, pz0);
+            cr.pos.push(px0, y + gy + hgt - 0.08, pz0, px1, y + gy + hgt - 0.08, pz1, px1, y + gy - 0.08, pz1, px0, y + gy - 0.08, pz0);
             cr.uv.push(uv[0], uv[3], uv[2], uv[3], uv[2], uv[1], uv[0], uv[1]);
             for (let k = 0; k < 4; k++) { cr.shade.push(k < 2 ? 1.0 : 0.75); cr.light.push(ls, lb); }
             cr.extra.push(1, 1, 0, 0);
@@ -140,12 +144,13 @@ export function buildChunk(world, ccx, ccz, faceUV, faceTile) {
             cr.idx.push(base, base + 3, base + 2, base, base + 2, base + 1);
             cr.n += 4;
           });
-        } else if (r === 4) {
+        } else if (r === 4 || r === 5) {
+          const wa = r === 4 ? wa0 : la;
           for (let fi = 0; fi < 6; fi++) {
             const f = FACES[fi];
             const nx = x + f.n[0], ny = y + f.n[1], nz = z + f.n[2];
             const nid = get(nx, ny, nz);
-            if (nid === B.WATER || OPAQUE[nid]) continue;
+            if (nid === id || (OPAQUE[nid] && !SMOOTH[nid]) || (SMOOTH[nid] && fi !== 2)) continue;
             if (fi === 3) continue;
             const base = wa.n;
             const l = lightAt(nx, ny, nz);
@@ -157,7 +162,7 @@ export function buildChunk(world, ccx, ccz, faceUV, faceTile) {
               if (fi === 2) wa.uv.push(wx, wz); else wa.uv.push(wx + wz, wy);
               wa.shade.push(f.shade);
               wa.light.push(ls, lb);
-              const topNeighbour = get(x, y + 1, z) === B.WATER;
+              const topNeighbour = get(x, y + 1, z) === id;
               wa.extra.push(c[1] === 1 && !topNeighbour ? 1 : 0);
             }
             wa.idx.push(base, base + 3, base + 2, base, base + 2, base + 1);
@@ -167,11 +172,12 @@ export function buildChunk(world, ccx, ccz, faceUV, faceTile) {
       }
     }
   }
-  return { opaque: op.geometry(), cross: cr.geometry('aSway'), water: wa.geometry('aTop'), terrain: buildTerrain(world, ccx, ccz, faceTile) };
+  return { opaque: op.geometry(), cross: cr.geometry('aSway'), water: wa.geometry('aTop'), lava: la.geometry('aTop'), terrain: buildTerrain(world, ccx, ccz, faceTile) };
 }
 
 
 // ---------------------------------------------------------------- smooth terrain (surface nets)
+const SOLID_SMOOTH = (id) => SMOOTH[id] === 1;
 export function buildTerrain(world, ccx, ccz, faceTile) {
   const x0 = ccx * CH, z0 = ccz * CH;
   const P = CH + 4, ox = x0 - 2, oz = z0 - 2;
@@ -195,6 +201,21 @@ export function buildTerrain(world, ccx, ccz, faceTile) {
     if (lx === 0 || lz === 0 || ly === 0 || lx === P - 1 || lz === P - 1 || ly === NY - 1) { Dn[i] = s; continue; }
     const a = S[i - 1] + S[i + 1] + S[i - P] + S[i + P] + S[i - P * P] + S[i + P * P];
     Dn[i] = 0.62 * s + 0.38 * (a / 6);
+  }
+  // natural, unedited surface columns use the continuous height so hills are smooth slopes
+  for (let lz = 0; lz < P; lz++) for (let lx = 0; lx < P; lx++) {
+    const wx = ox + lx, wz = oz + lz;
+    if (wx < 0 || wz < 0 || wx >= W || wz >= D) continue;
+    const S = world.surf[wx + wz * W];
+    if (!S) continue;
+    const h = world.height[wx + wz * W];
+    const ly = h + 1;
+    if (ly + 1 >= NY) continue;
+    const i0 = li(lx, ly, lz), i1 = li(lx, ly + 1, lz);
+    if (!S || !SOLID_SMOOTH(ID[i0]) || SMOOTH[ID[i1]]) continue;
+    Dn[i0] = Math.min(1, Math.max(0.5, S - h));
+    Dn[i1] = Math.min(0.5, Math.max(0, S - h - 1));
+    Dn[li(lx, ly - 1, lz)] = Math.max(Dn[li(lx, ly - 1, lz)], 0.9);
   }
   const inside = (i) => Dn[i] > 0.5;
   // cell cache: cell (cx,cy,cz) spans voxel centres cx..cx+1
@@ -451,7 +472,24 @@ const terrainFS = /* glsl */`
   }
 `;
 
-export function createWorldMaterials(atlas, waterTex, info) {
+const lavaFS = /* glsl */`
+  uniform sampler2D uWater;
+  uniform float uTime;
+  uniform vec3 uFogColor;
+  uniform float uFogNear;
+  uniform float uFogFar;
+  varying vec2 vUv;
+  varying float vShade;
+  varying float vDist;
+  void main() {
+    vec4 t = texture2D(uWater, vUv * 0.5 + vec2(uTime * 0.02, uTime * 0.013));
+    vec4 t2 = texture2D(uWater, vUv * 0.25 - vec2(uTime * 0.011, -uTime * 0.017));
+    vec3 c = mix(t.rgb, t2.rgb, 0.5) * (0.85 + 0.15 * vShade) * 1.15;
+    float f = smoothstep(uFogNear, uFogFar, vDist) * 0.6;
+    gl_FragColor = vec4(mix(c, uFogColor, f), 1.0);
+  }
+`;
+export function createWorldMaterials(atlas, waterTex, info, lavaTex) {
   const shared = {
     uTime: { value: 0 },
     uDay: { value: 1 },
@@ -478,7 +516,11 @@ export function createWorldMaterials(atlas, waterTex, info) {
     uniforms: Object.assign({}, shared, { uWater: { value: waterTex } }),
     vertexShader: waterVS, fragmentShader: waterFS, transparent: true, depthWrite: false, side: THREE.DoubleSide,
   });
-  return { shared, opaque, cross, water, terrain };
+  const lava = new THREE.ShaderMaterial({
+    uniforms: Object.assign({}, shared, { uWater: { value: lavaTex } }),
+    vertexShader: waterVS, fragmentShader: lavaFS,
+  });
+  return { shared, opaque, cross, water, terrain, lava };
 }
 
 // ---------------------------------------------------------------- chunk manager
@@ -498,6 +540,7 @@ export class ChunkManager {
     if (g.terrain) c.meshes.push(new THREE.Mesh(g.terrain, this.mats.terrain));
     if (g.opaque) c.meshes.push(new THREE.Mesh(g.opaque, this.mats.opaque));
     if (g.cross) c.meshes.push(new THREE.Mesh(g.cross, this.mats.cross));
+    if (g.lava) c.meshes.push(new THREE.Mesh(g.lava, this.mats.lava));
     if (g.water) { const m = new THREE.Mesh(g.water, this.mats.water); m.renderOrder = 2; c.meshes.push(m); }
     for (const m of c.meshes) { m.matrixAutoUpdate = false; m.visible = c.visible !== false; this.scene.add(m); }
     c.built = true;

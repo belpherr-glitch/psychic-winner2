@@ -247,6 +247,13 @@ export class Ent {
   common(dt) {
     this.hurtT -= dt;
     this.group.position.copy(this.pos);
+    if (this.onGround && !this.boss) {
+      const off = this.game.world.groundOffset(this.pos.x, this.pos.z, this.pos.y);
+      this.visOff = (this.visOff || 0) + (off - (this.visOff || 0)) * Math.min(1, dt * 10);
+    } else this.visOff = (this.visOff || 0) * 0.9;
+    if (this.stepped) this.visOff -= 1.02;
+    this.group.position.y += this.visOff;
+    if (this.inLava && !this.boss) { this.lavaT = (this.lavaT || 0) - dt; if (this.lavaT <= 0) { this.lavaT = 0.5; this.hurt(15, null, 0); } }
     this.group.rotation.y = this.yaw;
     if (this.shadow) this.game.placeShadow(this.shadow, this.pos, this.w);
     if (this.pos.y < -10) this.remove();
@@ -324,7 +331,7 @@ export class Walker extends Ent {
     this.rig = rig;
     this.group.add(rig.group);
     this.mats.push(rig.material);
-    this.w = 0.6; this.h = 1.8;
+    this.w = 0.6; this.h = 1.8; this.step = true;
     this.hp = this.maxHp = 55;
     this.damage = 14;
     this.walkT = Math.random() * 10;
@@ -344,7 +351,7 @@ export class Walker extends Ent {
     const ctrl = this.onGround ? 10 : 2;
     this.vel.x += (mx * sp - this.vel.x) * Math.min(1, dt * ctrl);
     this.vel.z += (mz * sp - this.vel.z) * Math.min(1, dt * ctrl);
-    if ((this.hitWall || canStep(this.game.world, this, mx, mz)) && this.onGround) this.vel.y = 8.6;
+    if (this.hitWall && this.onGround) this.vel.y = 8.6;
     if (this.inWater && chase) this.vel.y = Math.max(this.vel.y, 2.5);
     this.physics(dt);
     this.touchPlayer(dt);
@@ -428,7 +435,7 @@ export class NPC extends Ent {
     this.rig = rig;
     this.group.add(rig.group);
     this.mats.push(rig.material);
-    this.w = 0.6; this.h = 1.8;
+    this.w = 0.6; this.h = 1.8; this.step = true;
     this.hp = this.maxHp = 250;
     this.hostile = false;
     this.npc = true;
@@ -472,7 +479,7 @@ export class NPC extends Ent {
     const sp = 1.6;
     this.vel.x += (mx * sp - this.vel.x) * Math.min(1, dt * 8);
     this.vel.z += (mz * sp - this.vel.z) * Math.min(1, dt * 8);
-    if ((this.hitWall || canStep(this.game.world, this, mx, mz)) && this.onGround && (mx || mz)) this.vel.y = 8.6;
+    if (this.hitWall && this.onGround && (mx || mz)) this.vel.y = 8.6;
     this.physics(dt);
     this.walkT += dt * Math.hypot(this.vel.x, this.vel.z) * 2.4;
     const s = Math.sin(this.walkT) * 0.55;

@@ -68,6 +68,8 @@ export class Player {
     this.bob = 0;
     this.heldId = -1;
     this.fallStart = null;
+    this.step = true;
+    this.visY = null;
 
     // third-person rig
     const proto = buildHumanoid(SKINS.player);
@@ -93,7 +95,7 @@ export class Player {
   }
   renderOrderFix(obj) { obj.traverse((o) => { o.renderOrder = 50; }); }
 
-  eye() { return new V(this.pos.x, this.pos.y + this.eyeH, this.pos.z); }
+  eye() { return new V(this.pos.x, (this.visY === null ? this.pos.y : this.visY) + this.eyeH, this.pos.z); }
   lookDir() {
     return new V(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch));
   }
@@ -171,7 +173,6 @@ export class Player {
     } else {
       this.vel.y = Math.max(-45, this.vel.y - 27 * dt);
       if (inp.jump && this.onGround) { this.vel.y = 8.7; sfx('jump'); }
-      else if (g.settings.autoJump && this.onGround && mag > 0.3 && canStep(g.world, this, wish.x, wish.z)) this.vel.y = 8.7;
     }
     const wasGround = this.onGround;
     moveBody(g.world, this, dt);
@@ -183,6 +184,13 @@ export class Player {
       this.fallStart = null;
     }
     if (this.onGround) this.fallStart = null;
+
+    // smooth visual height: hide 1-block step-ups and follow the smooth ground surface
+    const off = this.onGround ? g.world.groundOffset(this.pos.x, this.pos.z, this.pos.y) : 0;
+    const target = this.pos.y + off;
+    if (this.visY === null || Math.abs(this.visY - target) > 2.5) this.visY = target;
+    else this.visY += (target - this.visY) * Math.min(1, dt * (this.onGround ? 12 : 30));
+    if (this.inLava) this.hurt(20, null, 0);
 
     // regen
     this.regenT += dt;
@@ -206,7 +214,7 @@ export class Player {
     P.armR.rotation.z = sw * 0.3;
     P.head.rotation.x = -this.pitch * 0.7;
     if (!this.onGround && !this.inWater) { P.legL.rotation.x = 0.4; P.legR.rotation.x = -0.2; }
-    this.rig.group.position.copy(this.pos);
+    this.rig.group.position.set(this.pos.x, this.visY, this.pos.z);
     this.rig.group.rotation.y = this.yaw + Math.PI;
     g.placeShadow(this.shadow, this.pos, 0.6);
 

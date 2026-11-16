@@ -8,7 +8,9 @@ export const B = {
   PRISM_PINK: 17, PRISM_GOLD: 18, PRISM_LILAC: 19, PALE_LOG: 20, WATER: 21, BEDROCK: 22, BRICK: 23,
   WORKBENCH: 24, TORCH: 25, CACTUS: 26, SANDSTONE: 27, TALL_GRASS: 28, FLOWER_RED: 29, FLOWER_YELLOW: 30,
   PRISM_TUFT: 31, MUSHROOM: 32, DEAD_BUSH: 33, FURNACE: 34, SNOWY_DIRT: 35, DARK_LEAVES: 36, PINE_LOG: 37,
-  GLOWCAP: 38, CLOUD: 39,
+  GLOWCAP: 38, CLOUD: 39, ASH: 40, LAVA: 41, EMBER_ORE: 42, CHEST: 43, CHEST_OPEN: 44, MAGMA: 45,
+  SHADOW_GRASS: 46, SHADOW_STONE: 47, SHADOW_LOG: 48, SHADOW_LEAVES: 49, SHADOW_SHROOM: 50, SHADOW_THORN: 51,
+  FLOWER_BLUE: 52, FLOWER_PURPLE: 53,
 };
 
 // render: cube | cross | torch | water | none
@@ -62,6 +64,20 @@ def(B.SNOWY_DIRT, 'Terra Nevada', { tex: ['snow', 'snow_side', 'dirt'], hardness
 def(B.DARK_LEAVES, 'Folhas Densas', { tex: 'dark_leaves', hardness: 0.2, tool: 'axe', filter: 2, drop: 0 });
 def(B.PINE_LOG, 'Madeira de Pinho', { tex: ['pine_log_top', 'pine_log_side', 'pine_log_top'], hardness: 1.1, tool: 'axe', drop: B.LOG });
 def(B.CLOUD, 'Nuvem', { tex: 'cloud', hardness: 0.3, tool: 'none' });
+def(B.ASH, 'Cinza', { tex: 'ash', hardness: 0.6, tool: 'shovel' });
+def(B.LAVA, 'Lava', { render: 'lava', solid: false, opaque: false, filter: 1, drop: 0, hardness: -1, replaceable: true, emit: 15 });
+def(B.EMBER_ORE, 'Brasita', { tex: 'ember_ore', hardness: 4.5, emit: 9, minPower: 2.4 });
+def(B.MAGMA, 'Pedra Magmática', { tex: 'magma', hardness: 2.2, emit: 6 });
+def(B.SHADOW_GRASS, 'Grama Sombria', { tex: ['shadow_grass_top', 'shadow_grass_side', 'dirt'], hardness: 0.5, tool: 'shovel', drop: B.DIRT });
+def(B.SHADOW_STONE, 'Pedra Sombria', { tex: 'shadow_stone', hardness: 1.6 });
+def(B.SHADOW_LOG, 'Madeira Sombria', { tex: ['shadow_log_top', 'shadow_log_side', 'shadow_log_top'], hardness: 1.1, tool: 'axe' });
+def(B.SHADOW_LEAVES, 'Folhas Sombrias', { tex: 'shadow_leaves', hardness: 0.2, tool: 'axe', filter: 2, drop: 0 });
+def(B.SHADOW_SHROOM, 'Cogumelo Sombrio', Object.assign({ tex: 'shadow_shroom', emit: 4 }, plant));
+def(B.SHADOW_THORN, 'Espinho Sombrio', Object.assign({ tex: 'shadow_thorn', drop: 0 }, plant));
+def(B.FLOWER_BLUE, 'Flor Celeste', Object.assign({ tex: 'flower_blue' }, plant));
+def(B.FLOWER_PURPLE, 'Flor Violeta', Object.assign({ tex: 'flower_purple' }, plant));
+def(B.CHEST, 'Baú', { tex: ['chest_top', 'chest_side', 'chest_top'], hardness: 1.0, tool: 'axe', drop: 0 });
+def(B.CHEST_OPEN, 'Baú Vazio', { tex: ['chest_top', 'chest_side_open', 'chest_top'], hardness: 1.0, tool: 'axe', drop: 0 });
 
 export const BLOCKS = DEF;
 export const NUM_BLOCKS = DEF.length;
@@ -75,20 +91,20 @@ export const RENDER = new Uint8Array(256); // 0 none 1 cube 2 cross 3 torch 4 wa
 // Natural terrain is drawn as a smooth surface instead of cubes.
 export const SMOOTH = new Uint8Array(256);
 for (const id of [B.GRASS, B.DIRT, B.STONE, B.SAND, B.SNOW, B.ICE, B.COPPER_ORE, B.IRON_ORE, B.GOLD_ORE, B.CRYSTAL_ORE,
-  B.PRISM_GRASS, B.MOONSTONE, B.BEDROCK, B.SANDSTONE, B.SNOWY_DIRT, B.CLOUD]) SMOOTH[id] = 1;
+  B.PRISM_GRASS, B.MOONSTONE, B.BEDROCK, B.SANDSTONE, B.SNOWY_DIRT, B.CLOUD, B.ASH, B.EMBER_ORE, B.MAGMA, B.SHADOW_GRASS, B.SHADOW_STONE]) SMOOTH[id] = 1;
 for (const d of DEF) {
   if (!d) continue;
   OPAQUE[d.id] = d.opaque ? 1 : 0;
   SOLID[d.id] = d.solid ? 1 : 0;
   FILTER[d.id] = d.filter;
   EMIT[d.id] = d.emit;
-  RENDER[d.id] = { none: 0, cube: 1, cross: 2, torch: 3, water: 4 }[d.render];
+  RENDER[d.id] = { none: 0, cube: 1, cross: 2, torch: 3, water: 4, lava: 5 }[d.render];
 }
 
 // ---------------------------------------------------------------- textures
 const T = 16;
 const PAL = {
-  grass: ['#2f6f26', '#3a8a2e', '#46a137', '#53b542', '#68c752'],
+  grass: ['#1f8a3a', '#25a043', '#2bab49', '#33b851', '#45c75e'],
   dirt: ['#5a3a22', '#6e482b', '#7d5534', '#8e6540', '#9d744d'],
   stone: ['#6c6e76', '#7a7c84', '#878992', '#9496a0'],
   sand: ['#cdb06c', '#d9bf7c', '#e4cc8c', '#eed99e'],
@@ -115,12 +131,8 @@ const painters = {};
 function tile(name, fn) { painters[name] = fn; }
 
 tile('grass_top', (p) => {
-  p.clouds(PAL.grass.slice(1), 4, 1, 0.35);
-  for (let i = 0; i < 26; i++) { // blade highlights
-    const x = p.ri(16), y = p.ri(16);
-    p.set(x, y, PAL.grass[4]); p.setW(x, y + 1, PAL.grass[1]);
-  }
-  for (let i = 0; i < 6; i++) p.set(p.ri(16), p.ri(16), '#7fd65e');
+  p.speckle(PAL.grass.slice(1, 4), [3, 4, 3]);
+  for (let i = 0; i < 18; i++) { const x = p.ri(16), y = p.ri(16); p.set(x, y, PAL.grass[4]); p.setW(x + 1, y + 1, PAL.grass[0]); }
 });
 tile('dirt', (p) => {
   p.clouds(PAL.dirt.slice(0, 4), 4, 2, 0.4);
@@ -342,17 +354,81 @@ tile('sandstone_side', (p) => {
 tile('sandstone_top', (p) => { p.clouds(PAL.sandstone, 4, 12, 0.2); p.bevel(1.1, 0.85); });
 tile('cloud', (p) => { p.clouds(['#e8eef8', '#f3f7fc', '#ffffff'], 5, 13, 0.1); });
 
+tile('ash', (p) => { p.clouds(['#2e2a2c', '#3a3536', '#474041', '#544b4a'], 4, 21, 0.3); for (let i = 0; i < 6; i++) p.set(p.ri(16), p.ri(16), '#6a5f5c'); });
+tile('ember_ore', (p) => {
+  p.cobble(['#2e2a2c', '#3a3536', '#474041'], '#1a1718', 6);
+  for (let i = 0; i < 5; i++) {
+    const cx = 2 + p.ri(12), cy = 2 + p.ri(12);
+    for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1], [1, 1]]) if (p.rand() < 0.85) p.set(cx + dx, cy + dy, '#ff6a1a');
+    p.set(cx, cy, '#ffd84a'); p.set(cx + 1, cy + 1, '#b8300a');
+  }
+});
+tile('magma', (p) => {
+  p.cobble(['#3a1a14', '#4a2018', '#5a281c'], '#ff5a1a', 6, 1.1);
+  for (let i = 0; i < 6; i++) p.set(p.ri(16), p.ri(16), '#ffb02a');
+});
+function chestBase(p, open) {
+  p.fill('#7a4a20');
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    let c = shade(PAL.planks[(y >> 2) % 2 ? 1 : 2], 0.95 + p.rand() * 0.08);
+    if (y % 4 === 3) c = PAL.planks[0];
+    p.set(x, y, c);
+  }
+  for (let i = 0; i < 16; i++) { p.set(i, 0, '#3a2412'); p.set(i, 15, '#3a2412'); p.set(0, i, '#c9a03a'); p.set(15, i, '#c9a03a'); }
+  for (let i = 0; i < 16; i++) p.set(i, 6, '#c9a03a');
+  if (open) { p.rect(1, 1, 14, 5, '#1a1008'); }
+  p.rect(7, 5, 2, 4, '#f2c94c'); p.set(7, 7, '#5a3a10');
+}
+tile('chest_side', (p) => chestBase(p, false));
+tile('chest_side_open', (p) => chestBase(p, true));
+tile('chest_top', (p) => { painters.planks(p); for (let i = 0; i < 16; i++) { p.set(0, i, '#c9a03a'); p.set(15, i, '#c9a03a'); p.set(i, 0, '#c9a03a'); p.set(i, 15, '#c9a03a'); } });
+
 // --- cross sprites (transparent)
 tile('tall_grass', (p) => {
   const cols = PAL.grass;
-  for (let b = 0; b < 7; b++) {
-    const x0 = 1 + b * 2 + p.ri(2), h = 6 + p.ri(9), lean = (p.rand() - 0.5) * 0.5;
+  for (let b = 0; b < 3; b++) {
+    const x0 = 3 + b * 4 + p.ri(3), h = 7 + p.ri(8), lean = (p.rand() - 0.5) * 0.6;
     for (let i = 0; i < h; i++) {
       const x = Math.round(x0 + lean * i), y = 15 - i;
-      p.set(x, y, cols[Math.min(4, 1 + Math.floor((i / h) * 4))]);
+      p.set(x, y, cols[Math.min(4, Math.floor((i / h) * 5))]);
+      if (i < h * 0.4) p.set(x + 1, y, cols[0]);
     }
   }
+  p.outline([10, 40, 20, 255]);
 });
+tile('flower_blue', (p) => {
+  p.line(8, 15, 8, 8, '#1f8a3a'); p.set(7, 12, '#2bab49'); p.set(9, 11, '#2bab49');
+  for (const [dx, dy] of [[0, -2], [-2, 0], [2, 0], [0, 2], [-1, -1], [1, -1], [-1, 1], [1, 1]]) p.set(8 + dx, 6 + dy, (dx + dy) % 2 ? '#4a8af0' : '#7ab0ff');
+  p.set(8, 6, '#ffffff'); p.outline([16, 30, 60, 255]);
+});
+tile('flower_purple', (p) => {
+  p.line(8, 15, 7, 7, '#1f8a3a'); p.set(9, 12, '#2bab49');
+  p.rect(5, 4, 6, 3, '#a35ae0'); p.rect(6, 3, 4, 1, '#c88cff'); p.rect(6, 7, 4, 1, '#7a3ab8'); p.set(7, 5, '#e6ccff');
+  p.outline([40, 16, 60, 255]);
+});
+tile('shadow_shroom', (p) => {
+  p.rect(7, 9, 2, 7, '#c9b8e8');
+  for (let x = 3; x <= 12; x++) for (let y = 4; y <= 9; y++) { const dx = (x - 7.5) / 5, dy = (y - 9) / 5; if (dx * dx + dy * dy <= 1) p.set(x, y, y < 7 ? '#8a4ad8' : '#5a2a9a'); }
+  p.set(6, 6, '#e6ccff'); p.set(9, 5, '#e6ccff'); p.outline([30, 10, 50, 255]);
+});
+tile('shadow_thorn', (p) => {
+  const c = '#4a2a6a';
+  p.line(8, 15, 8, 4, c); p.line(8, 11, 4, 6, c); p.line(8, 9, 12, 3, c); p.line(5, 8, 3, 7, c); p.set(12, 3, '#a35ae0'); p.set(4, 6, '#a35ae0');
+});
+tile('shadow_grass_top', (p) => {
+  p.speckle(['#5a3a9a', '#6a46b0', '#7a52c4'], [3, 4, 3]);
+  for (let i = 0; i < 14; i++) { const x = p.ri(16), y = p.ri(16); p.set(x, y, '#9a78e0'); p.setW(x + 1, y + 1, '#4a2e80'); }
+});
+tile('shadow_grass_side', (p) => grassSide(p, ['#4a2e80', '#5a3a9a', '#6a46b0', '#7a52c4', '#9a78e0']));
+tile('shadow_stone', (p) => { p.cobble(['#3e3450', '#4a3e60', '#564870', '#625280'], '#241e30', 7); });
+tile('shadow_log_side', (p) => {
+  for (let x = 0; x < 16; x++) { const b = ['#3a2a40', '#4a3450', '#2e2234'][(x * 5 + 1) % 3]; for (let y = 0; y < 16; y++) p.set(x, y, shade(b, 0.9 + p.rand() * 0.2)); }
+  for (let i = 0; i < 6; i++) p.set(p.ri(16), p.ri(16), '#a35ae0');
+});
+tile('shadow_log_top', (p) => { for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) p.set(x, y, Math.floor(Math.hypot(x - 7.5, y - 7.5)) % 2 ? '#4a3450' : '#5a4060'); });
+tile('shadow_leaves', (p) => leafy(p, ['#2a1a40', '#3e2660', '#52327e', '#66409a', '#8a5ac4'], '#140a20'));
+
+// --- cross sprites (transparent)
 tile('flower_red', (p) => {
   p.line(8, 15, 8, 7, '#3a8a2e'); p.set(7, 12, '#46a137'); p.set(6, 11, '#46a137'); p.set(9, 10, '#46a137'); p.set(10, 9, '#46a137');
   const pc = ['#c4243c', '#e8364e', '#ff6b7c'];
@@ -453,6 +529,16 @@ export function makeWaterTexture() {
   tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.NoColorSpace;
+  return tex;
+}
+
+export function makeLavaTexture() {
+  const p = new Painter(16, 16, 777);
+  p.clouds(['#b8300a', '#e0501a', '#ff7a1a', '#ffb02a', '#ffe27a'], 4, 5, 0.2);
+  for (let k = 0; k < 5; k++) { const x = p.ri(15), y = p.ri(15); p.set(x, y, '#5a1a0a'); p.set(x + 1, y, '#7a2a10'); }
+  const tex = new THREE.CanvasTexture(p.toCanvas());
+  tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.colorSpace = THREE.NoColorSpace;
   return tex;
 }
 

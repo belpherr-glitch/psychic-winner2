@@ -1,7 +1,7 @@
 // Voxília — game bootstrap and main loop.
 import * as THREE from 'three';
 import { World, W, D, H, SEA, BIOME_NAMES, BIOME } from './world.js';
-import { B, BLOCKS, buildAtlas, makeWaterTexture, makeCrackTextures, SOLID, RENDER, OPAQUE } from './blocks.js';
+import { B, BLOCKS, buildAtlas, makeWaterTexture, makeLavaTexture, makeCrackTextures, SOLID, RENDER, OPAQUE } from './blocks.js';
 import { ChunkManager, createWorldMaterials } from './mesher.js';
 import { Sky } from './sky.js';
 import { Particles, DamageText } from './particles.js';
@@ -97,7 +97,7 @@ class Game {
     }
     const atlas = buildAtlas();
     this.atlasTex = atlas.tex; this.faceUV = atlas.faceUV;
-    this.mats = createWorldMaterials(atlas.tex, makeWaterTexture(), atlas);
+    this.mats = createWorldMaterials(atlas.tex, makeWaterTexture(), atlas, makeLavaTexture());
     this.chunks = new ChunkManager(this.world, this.scene, this.mats, this.faceUV, atlas.faceTile);
     progress(0.84, 'Montando os blocos');
     await this.chunks.buildAll((p) => progress(0.84 + p * 0.14, 'Montando os blocos'));
@@ -407,11 +407,17 @@ class Game {
     const tool = it && it.type === 'tool' ? it.tool : null;
     const power = tool ? it.power : 1;
     let time;
-    if (def.tool === 'none') time = 0.08 + def.hardness;
-    else if (tool === def.tool) time = (def.hardness / power) * 0.7;
-    else if (def.tool === 'shovel') time = def.hardness * (tool === 'pick' ? 0.75 : 1.1);
-    else if (def.tool === 'axe') time = def.hardness * (tool === 'pick' ? 2.2 : 3.2);
-    else time = def.hardness * (tool ? 3.5 : 6);
+    if (def.minPower && (tool !== 'pick' || power < def.minPower)) {
+      if (this.mineT <= 0) { this.ui.showItemName('Precisa de uma picareta mais forte'); this.mineT = 0.8; p.swing = p.swingDur = 0.25; sfx('dig'); }
+      this.mineT -= dt;
+      return;
+    }
+    // Fast, hit-based mining: a pickaxe breaks dirt in one swing and stone in two or three.
+    if (def.tool === 'none') time = 0.05;
+    else if (tool === def.tool || (tool === 'pick' && def.tool === 'shovel')) time = (def.hardness / power) * 0.28;
+    else if (def.tool === 'shovel') time = def.hardness * 0.6;
+    else if (def.tool === 'axe') time = def.hardness * (tool === 'pick' ? 0.9 : 1.6);
+    else time = def.hardness * (tool ? 1.4 : 2.5);
     this.mining.prog += dt / Math.max(0.05, time);
     this.mineT -= dt;
     if (this.mineT <= 0) {
@@ -598,7 +604,7 @@ class Game {
       this.computeTarget();
       if (!p.dead && inp.attack) this.attackHeld(dt);
       else { this.mining = null; this.attackT -= dt; }
-      if (inp.useHeld && !p.dead) { this.useT -= dt; if (this.useT <= 0) { this.useT = 0.28; this.use(); } } else this.useT = 0.28;
+      if (inp.useHeld && !p.dead) { this.useT -= dt; if (this.useT <= 0) { this.useT = 0.16; this.use(); } } else this.useT = 0.2;
       for (const m of this.mobs) if (!m.dead) m.update(dt);
       this.mobs = this.mobs.filter((m) => !m.dead);
       for (const pr of this.projectiles) pr.update(dt);
