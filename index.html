@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0d1424">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Voxília</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&display=swap">
+<style>
+/* Layout: full-screen canvas, HUD pinned to safe-area corners, panels centred. */
+:root {
+  --ink: #f4efe0;
+  --ink-dim: #b9b2a0;
+  --panel: rgba(16, 24, 44, 0.9);
+  --panel-edge: #3d5a8c;
+  --panel-hi: #7aa2e0;
+  --gold: #f2c94c;
+  --danger: #e8344f;
+  --ok: #6ad48a;
+  --slot: rgba(22, 34, 62, 0.82);
+  --slot-edge: #2c4370;
+  --font: "Pixelify Sans", "Courier New", ui-monospace, monospace;
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1424; color: var(--ink); font-family: var(--font); }
+body { user-select: none; -webkit-user-select: none; touch-action: none; overscroll-behavior: none; }
+[hidden] { display: none !important; }
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+#lookzone { position: fixed; inset: 0; z-index: 1; }
+.btn {
+  font-family: var(--font); font-size: 18px; font-weight: 600; color: var(--ink);
+  background: linear-gradient(#35558f, #22396a); border: 2px solid #0b1224; box-shadow: inset 0 2px 0 #6f93d6, inset 0 -3px 0 #16264a;
+  padding: 10px 18px; border-radius: 4px; cursor: pointer; letter-spacing: 0.02em;
+}
+.btn:hover { filter: brightness(1.12); }
+.btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.btn:disabled { filter: grayscale(0.8) brightness(0.7); cursor: default; }
+.btn.gold { background: linear-gradient(#e6b23a, #b5801c); box-shadow: inset 0 2px 0 #ffe58a, inset 0 -3px 0 #7a520e; color: #2a1a06; }
+.btn.small { font-size: 14px; padding: 6px 10px; }
+.btn.danger { background: linear-gradient(#c43a4f, #8a1f31); box-shadow: inset 0 2px 0 #f07a8a, inset 0 -3px 0 #5a1020; }
+
+/* ---------- title */
+#title { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 16px; background: radial-gradient(ellipse at center, rgba(8, 12, 24, 0.15), rgba(8, 12, 24, 0.75)); }
+.logo { font-size: clamp(48px, 13vw, 110px); font-weight: 700; letter-spacing: 0.04em; line-height: 0.9; color: #fff3c4;
+  text-shadow: 0 4px 0 #b5801c, 0 8px 0 #6a3e10, 0 12px 0 #2a1406, 0 14px 24px rgba(0, 0, 0, 0.6); }
+.logo span { color: #9ff4ff; text-shadow: 0 4px 0 #2fb8d6, 0 8px 0 #1a6f8a, 0 12px 0 #0a2a3a, 0 14px 24px rgba(0, 0, 0, 0.6); }
+.tag { font-size: clamp(14px, 3.6vw, 20px); color: var(--ink); text-shadow: 0 2px 0 #000; text-align: center; max-width: 34ch; }
+#loading { width: min(420px, 86vw); display: grid; gap: 8px; text-align: center; }
+.bar { height: 16px; background: #0b1224; border: 2px solid #000; box-shadow: inset 0 0 0 2px #2c4370; }
+#loadfill { height: 100%; width: 0; background: repeating-linear-gradient(90deg, #6ad48a 0 8px, #4fb06c 8px 16px); transition: width 0.2s; }
+#loadlabel { font-size: 15px; color: var(--ink-dim); }
+#titlebtns { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+#titlebtns .btn { min-width: 220px; font-size: 22px; }
+.hint { font-size: 13px; color: var(--ink-dim); text-align: center; max-width: 46ch; line-height: 1.4; text-shadow: 0 1px 0 #000; }
+.confirm { background: var(--panel); border: 2px solid var(--panel-edge); padding: 12px; display: grid; gap: 10px; text-align: center; border-radius: 4px; }
+.confirm .row { display: flex; gap: 10px; justify-content: center; }
+
+/* ---------- HUD */
+#hud { position: fixed; inset: 0; z-index: 5; pointer-events: none; }
+#hud > * { pointer-events: auto; }
+#topbar { position: absolute; top: calc(8px + var(--sat)); left: calc(8px + var(--sal)); right: calc(8px + var(--sar)); display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; pointer-events: none; }
+#topbar > * { pointer-events: auto; }
+#hotwrap { display: grid; gap: 4px; }
+#hotbar { display: grid; grid-template-columns: repeat(9, 1fr); gap: 3px; width: min(470px, calc(100vw - 150px)); }
+.slot { position: relative; aspect-ratio: 1; background: var(--slot); border: 2px solid #0b1224; box-shadow: inset 0 0 0 2px var(--slot-edge); border-radius: 3px; padding: 0; cursor: pointer; font-family: var(--font); color: var(--ink); }
+.slot img { position: absolute; inset: 14%; width: 72%; height: 72%; image-rendering: pixelated; pointer-events: none; }
+.slot .cnt { position: absolute; right: 3px; bottom: 1px; font-size: 13px; font-weight: 700; text-shadow: 1px 1px 0 #000, -1px 0 0 #000; pointer-events: none; }
+.slot .num { position: absolute; left: 3px; top: 0; font-size: 10px; color: var(--ink-dim); pointer-events: none; }
+.slot.sel { box-shadow: inset 0 0 0 2px var(--gold), 0 0 0 2px var(--gold); background: rgba(70, 60, 30, 0.85); }
+#itemname { font-size: 15px; height: 18px; text-shadow: 1px 1px 0 #000; color: #fff3c4; opacity: 0; }
+#itemname.fade { animation: fadeName 2.2s forwards; }
+@keyframes fadeName { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
+#vitals { display: grid; gap: 4px; justify-items: end; text-align: right; }
+#hearts, #stars { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px; max-width: 250px; }
+#hearts img, #stars img { width: 21px; height: 21px; image-rendering: pixelated; }
+.vtxt { font-size: 13px; text-shadow: 1px 1px 0 #000; }
+#info { font-size: 13px; color: #e8ffd8; text-shadow: 1px 1px 0 #000; }
+#topbtns { display: flex; gap: 6px; }
+.mini { pointer-events: auto; font-family: var(--font); font-size: 14px; color: var(--ink); background: var(--slot); border: 2px solid #0b1224; box-shadow: inset 0 0 0 2px var(--slot-edge); border-radius: 4px; padding: 6px 9px; cursor: pointer; }
+.mini.down { filter: brightness(1.4); }
+
+#crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%, -50%); pointer-events: none; }
+#crosshair::before, #crosshair::after { content: ""; position: absolute; background: rgba(255, 255, 255, 0.85); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5); }
+#crosshair::before { left: 10px; top: 2px; width: 2px; height: 18px; }
+#crosshair::after { top: 10px; left: 2px; width: 18px; height: 2px; }
+#msg { position: absolute; top: 30%; left: 50%; transform: translateX(-50%); font-size: clamp(18px, 4vw, 28px); font-weight: 700; text-align: center; text-shadow: 2px 2px 0 #000, -1px -1px 0 #000; pointer-events: none; width: 90vw; }
+#feed { position: absolute; right: calc(10px + var(--sar)); bottom: calc(46% + var(--sab)); display: grid; gap: 2px; justify-items: end; pointer-events: none; }
+.feeditem { display: flex; align-items: center; gap: 6px; font-size: 14px; text-shadow: 1px 1px 0 #000; }
+.feeditem img { width: 20px; height: 20px; image-rendering: pixelated; }
+#bossbar { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(14px + var(--sab)); width: min(520px, 60vw); text-align: center; pointer-events: none; }
+#bossname { font-size: 18px; font-weight: 700; text-shadow: 2px 2px 0 #000; }
+.bbar { height: 16px; background: #1a0a10; border: 2px solid #000; box-shadow: inset 0 0 0 2px #5a1f2c; position: relative; }
+#bossfill { height: 100%; background: linear-gradient(#ff6a6a, #c42a3a); width: 100%; transition: width 0.15s; }
+#bosshp { position: absolute; inset: 0; font-size: 12px; line-height: 12px; text-shadow: 1px 1px 0 #000; }
+#hurtflash { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 40%, rgba(200, 20, 30, 0.55)); opacity: 0; z-index: 4; }
+#hurtflash.on { animation: hurt 0.45s; }
+@keyframes hurt { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+/* touch controls */
+.touchonly { display: none; }
+body.touch .touchonly { display: block; }
+#joyzone { position: absolute; left: 0; bottom: 0; width: 42vw; height: 58vh; touch-action: none; }
+#joybase, #joyknob { position: absolute; left: 0; top: 0; border-radius: 50%; pointer-events: none; }
+#joybase { width: 120px; height: 120px; border: 3px solid rgba(255, 255, 255, 0.35); background: rgba(10, 16, 30, 0.25); transform: translate(60px, 200px); }
+#joyknob { width: 52px; height: 52px; background: rgba(240, 240, 255, 0.5); border: 2px solid rgba(0, 0, 0, 0.4); transform: translate(94px, 234px); }
+#joyzone:not(.active) #joybase { left: calc(28px + var(--sal)); top: auto; bottom: calc(28px + var(--sab)); transform: none; }
+#joyzone:not(.active) #joyknob { left: calc(62px + var(--sal)); top: auto; bottom: calc(62px + var(--sab)); transform: none; }
+#actions { position: absolute; right: calc(14px + var(--sar)); bottom: calc(18px + var(--sab)); width: 230px; height: 230px; }
+.act { position: absolute; border-radius: 50%; font-family: var(--font); font-weight: 700; color: var(--ink); text-shadow: 1px 1px 0 #000; border: 3px solid rgba(0, 0, 0, 0.55); display: grid; place-items: center; touch-action: none; font-size: 13px; padding: 0; }
+.act svg { width: 46%; height: 46%; display: block; margin: 0 auto -2px; }
+.act span { display: block; }
+.act.down { transform: scale(0.92); filter: brightness(1.35); }
+#b-attack { width: 96px; height: 96px; right: 0; bottom: 70px; background: rgba(196, 58, 79, 0.55); }
+#b-jump { width: 84px; height: 84px; right: 104px; bottom: 0; background: rgba(60, 120, 200, 0.5); }
+#b-use { width: 70px; height: 70px; right: 112px; bottom: 102px; background: rgba(90, 170, 110, 0.5); }
+#b-swap { width: 54px; height: 54px; right: 20px; bottom: 0; background: rgba(160, 130, 60, 0.5); font-size: 11px; }
+#btn-talk { position: absolute; right: calc(250px + var(--sar)); bottom: calc(40px + var(--sab)); }
+body:not(.touch) #btn-talk { right: 50%; transform: translateX(50%); bottom: 22%; }
+
+/* panels */
+.panel { position: fixed; z-index: 20; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--panel); border: 3px solid #0b1224; box-shadow: inset 0 0 0 2px var(--panel-edge), 0 10px 40px rgba(0, 0, 0, 0.5); border-radius: 6px; padding: 14px; max-height: calc(100vh - 24px - var(--sat) - var(--sab)); max-width: calc(100vw - 24px); overflow: auto; }
+.panel h2 { margin: 0 0 8px; font-size: 20px; color: #fff3c4; text-shadow: 2px 2px 0 #000; }
+#invpanel { width: min(880px, calc(100vw - 24px)); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 640px), (max-height: 420px) and (max-width: 900px) { #invpanel { grid-template-columns: minmax(0, 1fr); } }
+#invgrid { display: grid; grid-template-columns: repeat(9, 1fr); gap: 3px; }
+#invgrid .slot.hot { box-shadow: inset 0 0 0 2px #4a5f8c; }
+#invgrid .slot.sel { box-shadow: inset 0 0 0 2px var(--gold), 0 0 0 2px var(--gold); }
+#invdesc { font-size: 13px; color: var(--ink-dim); min-height: 34px; margin-top: 8px; line-height: 1.3; }
+.prow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+#stations { display: flex; gap: 8px; font-size: 13px; }
+#stations span { padding: 2px 6px; border-radius: 3px; border: 1px solid #000; }
+#stations .ok { background: #2a5a3a; color: #c8ffd8; }
+#stations .no { background: #3a2a30; color: #c8a0a8; }
+#craftlist { display: grid; gap: 5px; max-height: min(52vh, 440px); overflow-y: auto; padding-right: 4px; margin-top: 8px; }
+.recipe { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: rgba(10, 16, 32, 0.6); border: 1px solid #22345a; padding: 5px 7px; border-radius: 3px; opacity: 0.62; }
+.recipe.ok { opacity: 1; border-color: #4a6a9a; }
+.rout { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; }
+.rout > img { width: 32px; height: 32px; image-rendering: pixelated; flex: none; }
+.ring { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; color: var(--ink-dim); margin-top: 2px; }
+.ring span { display: inline-flex; align-items: center; gap: 2px; }
+.ring img { width: 16px; height: 16px; image-rendering: pixelated; }
+.ring .miss { color: #ff8a9a; }
+.ring .st { font-style: italic; }
+#dialog { top: auto; bottom: calc(14px + var(--sab)); transform: translateX(-50%); width: min(640px, calc(100vw - 24px)); background: rgba(24, 40, 110, 0.92); box-shadow: inset 0 0 0 2px #6f93d6, 0 10px 40px rgba(0, 0, 0, 0.5); }
+#dialog h2 { color: var(--gold); }
+#dlg-text { font-size: 17px; line-height: 1.4; margin: 0 0 12px; }
+.drow { display: flex; gap: 10px; flex-wrap: wrap; }
+#pause { width: min(440px, calc(100vw - 24px)); display: grid; gap: 10px; }
+.set { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 15px; }
+.set input[type=range] { width: 50%; accent-color: var(--gold); }
+.set select { font-family: var(--font); font-size: 15px; background: #0b1224; color: var(--ink); border: 2px solid var(--panel-edge); padding: 4px; }
+.set input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--gold); }
+.help { font-size: 13px; color: var(--ink-dim); line-height: 1.45; }
+#death { position: fixed; inset: 0; z-index: 15; display: grid; place-items: center; background: rgba(60, 0, 10, 0.45); text-align: center; pointer-events: none; }
+#death b { font-size: clamp(36px, 9vw, 64px); color: #ff6a7a; text-shadow: 3px 3px 0 #000; display: block; }
+#death span { font-size: 18px; text-shadow: 1px 1px 0 #000; }
+@media (max-width: 560px) {
+  #actions { transform: scale(0.86); transform-origin: right bottom; }
+  #hearts img, #stars img { width: 17px; height: 17px; }
+  #hotbar { width: calc(100vw - 16px); }
+  #topbar { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) { #itemname.fade, #hurtflash.on { animation-duration: 0.01s; } }
+</style>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="lookzone"></div>
+<div id="hurtflash"></div>
+
+<div id="hud" hidden>
+  <div id="crosshair"></div>
+  <div id="topbar">
+    <div id="hotwrap">
+      <div id="hotbar"></div>
+      <div id="itemname"></div>
+      <div id="info"></div>
+    </div>
+    <div id="vitals">
+      <div id="topbtns">
+        <button class="mini" data-tap="inv" aria-label="Inventário e criação">Bolsa</button>
+        <button class="mini" data-tap="cam" aria-label="Trocar câmera">Câmera</button>
+        <button class="mini" data-tap="pause" aria-label="Pausar">II</button>
+      </div>
+      <div class="vtxt" id="lifetxt"></div>
+      <div id="hearts"></div>
+      <div class="vtxt" id="manatxt"></div>
+      <div id="stars"></div>
+    </div>
+  </div>
+  <div id="msg"></div>
+  <div id="feed"></div>
+  <div id="bossbar" hidden><div id="bossname"></div><div class="bbar"><div id="bossfill"></div><div id="bosshp"></div></div></div>
+  <div id="joyzone" class="touchonly"><div id="joybase"></div><div id="joyknob"></div></div>
+  <div id="actions" class="touchonly">
+    <button class="act" id="b-attack" data-hold="attack" aria-label="Atacar ou minerar">
+      <svg viewBox="0 0 16 16" shape-rendering="crispEdges"><path fill="#fff" d="M12 1h3v3h-1v1h-1v1h-1v1h-1v1h-1v1H9v1H8v1H7l-1-1V9h1V8h1V7h1V6h1V5h1V4h1V3h1z"/><path fill="#f2c94c" d="M3 9h2v1h1v1h1v2H6v-1H5v-1H4v-1H3zM2 12h2v2H2z"/></svg><span>Atacar</span></button>
+    <button class="act" id="b-use" data-hold="useHeld" aria-label="Usar ou colocar bloco">
+      <svg viewBox="0 0 16 16" shape-rendering="crispEdges"><path fill="#fff" d="M3 5l5-3 5 3v6l-5 3-5-3z"/><path fill="#9fd88a" d="M8 8l5-3v6l-5 3z"/><path fill="#6aa85a" d="M3 5l5 3v6l-5-3z"/></svg><span>Usar</span></button>
+    <button class="act" id="b-jump" data-hold="jump" aria-label="Pular">
+      <svg viewBox="0 0 16 16" shape-rendering="crispEdges"><path fill="#fff" d="M8 2l5 5h-3v6H6V7H3z"/></svg><span>Pular</span></button>
+    <button class="act" id="b-swap" data-tap="quick" aria-label="Beber poção de cura">Poção</button>
+  </div>
+  <button class="btn small" id="btn-talk" data-tap="talk" hidden>Falar com Bento</button>
+</div>
+
+<div id="invpanel" class="panel" hidden>
+  <div>
+    <div class="prow"><h2>Bolsa</h2><div class="drow"><button class="btn small" id="invsort">Organizar</button><button class="btn small danger" id="invdrop">Descartar</button></div></div>
+    <div id="invgrid"></div>
+    <div id="invdesc"></div>
+  </div>
+  <div>
+    <div class="prow"><h2>Criação</h2><div id="stations"></div></div>
+    <div id="craftlist"></div>
+    <div class="prow" style="margin-top:10px"><span class="help">Fique perto de uma Bancada ou Fornalha para liberar mais receitas.</span><button class="btn small gold" id="invclose">Fechar</button></div>
+  </div>
+</div>
+
+<div id="dialog" class="panel" hidden>
+  <h2>Bento, o Explorador</h2>
+  <p id="dlg-text"></p>
+  <div class="drow"><button class="btn small" id="dlg-tip">Outra dica</button><button class="btn small" id="dlg-craft">Criação</button><button class="btn small gold" id="dlg-close">Fechar</button></div>
+</div>
+
+<div id="pause" class="panel" hidden>
+  <h2>Pausado</h2>
+  <button class="btn gold" id="btn-resume">Continuar</button>
+  <label class="set">Sensibilidade <input type="range" id="set-sens" min="0.3" max="2.5" step="0.1"></label>
+  <label class="set">Qualidade <select id="set-quality"><option value="baixa">Baixa</option><option value="media">Média</option><option value="alta">Alta</option></select></label>
+  <label class="set">Pular automaticamente <input type="checkbox" id="set-autojump"></label>
+  <label class="set">Inverter olhar vertical <input type="checkbox" id="set-invert"></label>
+  <label class="set">Música <input type="checkbox" id="set-music"></label>
+  <label class="set">Efeitos sonoros <input type="checkbox" id="set-sfx"></label>
+  <button class="btn" id="btn-save">Salvar agora</button>
+  <button class="btn" id="btn-quit">Salvar e voltar ao menu</button>
+  <button class="btn danger" id="btn-newworld">Criar novo mundo</button>
+  <div class="confirm" id="confirm-new2" hidden>Apagar este mundo e gerar outro?<div class="row"><button class="btn small danger" id="btn-new2-yes">Apagar</button><button class="btn small" id="btn-new2-no">Cancelar</button></div></div>
+  <p class="help">Celular: arraste à esquerda para andar, arraste à direita para olhar. Segure Atacar para minerar e lutar; Usar coloca blocos, bebe poções e conversa.<br>PC: WASD, mouse, clique esquerdo/direito, Espaço pula, Shift corre, E bolsa, V câmera, F falar, Q poção, 1–9 itens.</p>
+</div>
+
+<div id="death" hidden><div><b>Você morreu</b><span>Voltando em <span id="deathtime">5</span>…</span></div></div>
+
+<div id="title">
+  <div class="logo">VOX<span>ÍLIA</span></div>
+  <div class="tag">Minere, construa e enfrente o Colosso de Granito numa ilha de blocos.</div>
+  <div id="loading"><div class="bar"><div id="loadfill"></div></div><div id="loadlabel">Preparando…</div></div>
+  <div id="titlebtns" hidden>
+    <button class="btn gold" id="btn-play">Jogar</button>
+    <button class="btn" id="btn-new" hidden>Novo mundo</button>
+    <div class="confirm" id="confirm-new" hidden>Apagar o mundo salvo e começar outro?<div class="row"><button class="btn small danger" id="btn-new-yes">Apagar</button><button class="btn small" id="btn-new-no">Cancelar</button></div></div>
+  </div>
+  <p class="hint">Dica: no celular, gire para a horizontal. Câmera em 1ª pessoa, 3ª pessoa ou visão frontal no botão “Câmera”.</p>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
