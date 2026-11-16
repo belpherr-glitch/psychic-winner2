@@ -1,0 +1,9 @@
+{
+  "appId": "com.voxilia.jogo",
+  "appName": "Voxília",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#0d1424",
+    "allowMixedContent": false
+  }
+}

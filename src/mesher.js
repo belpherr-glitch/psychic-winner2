@@ -351,6 +351,7 @@ const commonFS = /* glsl */`
   uniform float uFogNear;
   uniform float uFogFar;
   uniform float uMinLight;
+  uniform float uMark;
   varying vec2 vUv;
   varying float vShade;
   varying vec2 vLight;
@@ -366,7 +367,7 @@ const commonFS = /* glsl */`
     vec3 L = max(max(sky, torch), vec3(uMinLight, uMinLight, uMinLight * 1.3));
     vec3 c = t.rgb * vShade * L;
     float f = smoothstep(uFogNear, uFogFar, vDist);
-    gl_FragColor = vec4(mix(c, uFogColor, f), 1.0);
+    gl_FragColor = vec4(mix(c, uFogColor, f), uMark);
   }
 `;
 const waterVS = /* glsl */`
@@ -513,11 +514,11 @@ export function createWorldMaterials(atlas, waterTex, info, lavaTex) {
     vertexShader: terrainVS, fragmentShader: terrainFS,
   });
   const opaque = new THREE.ShaderMaterial({
-    uniforms: Object.assign({}, shared, { uMap: { value: atlas }, uSwayAmt: { value: 0 } }),
+    uniforms: Object.assign({}, shared, { uMap: { value: atlas }, uSwayAmt: { value: 0 }, uMark: { value: 1 } }),
     vertexShader: commonVS, fragmentShader: commonFS,
   });
   const cross = new THREE.ShaderMaterial({
-    uniforms: Object.assign({}, shared, { uMap: { value: atlas }, uSwayAmt: { value: 1 } }),
+    uniforms: Object.assign({}, shared, { uMap: { value: atlas }, uSwayAmt: { value: 1 }, uMark: { value: 0.5 } }),
     vertexShader: commonVS, fragmentShader: commonFS, side: THREE.DoubleSide,
   });
   const water = new THREE.ShaderMaterial({

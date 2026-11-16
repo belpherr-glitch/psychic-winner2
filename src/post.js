@@ -9,7 +9,7 @@ export class OutlinePass {
       uniforms: {
         tColor: { value: null }, tDepth: { value: null },
         uTexel: { value: new THREE.Vector2() }, uNear: { value: 0.05 }, uFar: { value: 900 },
-        uFade: { value: 80 }, uInk: { value: new THREE.Color(0.05, 0.04, 0.08) }, uStrength: { value: 0.85 },
+        uFade: { value: 80 }, uInk: { value: new THREE.Color(0.05, 0.04, 0.08) }, uStrength: { value: 0.8 },
       },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
       fragmentShader: /* glsl */`
@@ -18,16 +18,19 @@ export class OutlinePass {
         uniform vec3 uInk; uniform float uStrength;
         varying vec2 vUv;
         float lin(vec2 uv) { float d = texture2D(tDepth, uv).x; float z = d * 2.0 - 1.0; return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
+        // grass and plants write alpha 0.5; they never create or receive outlines (stops shimmering)
+        float pick(vec2 uv, float d0) { vec4 c = texture2D(tColor, uv); return c.a < 0.9 ? d0 : lin(uv); }
         void main() {
           vec4 c = texture2D(tColor, vUv);
+          if (c.a < 0.9) { gl_FragColor = vec4(c.rgb, 1.0); return; }
           float d0 = lin(vUv);
-          float dl = lin(vUv - vec2(uTexel.x, 0.0)), dr = lin(vUv + vec2(uTexel.x, 0.0));
-          float du = lin(vUv + vec2(0.0, uTexel.y)), dd = lin(vUv - vec2(0.0, uTexel.y));
+          float dl = pick(vUv - vec2(uTexel.x, 0.0), d0), dr = pick(vUv + vec2(uTexel.x, 0.0), d0);
+          float du = pick(vUv + vec2(0.0, uTexel.y), d0), dd = pick(vUv - vec2(0.0, uTexel.y), d0);
           float m = min(min(dl, dr), min(du, dd));
-          float sil = (d0 - m) / max(d0, 0.001);
-          float lap = abs(dl + dr + du + dd - 4.0 * d0) / max(d0, 0.001);
-          float edge = max(smoothstep(0.018, 0.045, sil), smoothstep(0.02, 0.05, lap) * 0.6);
-          edge *= 1.0 - smoothstep(uFade * 0.55, uFade, m);
+          // silhouette only: the far side of a real depth jump (scaled so distant lines don't flicker)
+          float sil = (d0 - m) / max(m, 0.001);
+          float edge = smoothstep(0.06 + m * 0.002, 0.14 + m * 0.004, sil);
+          edge *= 1.0 - smoothstep(uFade * 0.45, uFade * 0.85, m);
           gl_FragColor = vec4(mix(c.rgb, uInk, edge * uStrength), 1.0);
         }`,
       depthTest: false, depthWrite: false,

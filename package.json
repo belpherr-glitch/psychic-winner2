@@ -1,0 +1,15 @@
+{
+  "name": "voxilia",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Voxília: jogo sandbox 3D para Android",
+  "scripts": {
+    "build:web": "node scripts/build-web.mjs",
+    "serve": "python3 -m http.server 8000"
+  },
+  "devDependencies": {
+    "@capacitor/android": "6.2.0",
+    "@capacitor/cli": "6.2.0",
+    "@capacitor/core": "6.2.0"
+  }
+}

@@ -322,7 +322,7 @@ export class World {
         else if (edge) {
           let id = y === fy + 3 ? B.LOG : B.PLANKS;
           if (y === fy + 1 && (dz === 0 || dx === 0) && !(dx === hx && dz === 0)) id = B.AIR; // windows
-          if (dx === hx && dz === 0 && y < fy + 2) id = B.AIR; // door
+          if (dx === hx && dz === 0 && y < fy + 2) id = B.DOOR; // door
           if (dx === hx && Math.abs(dz) === 1 && y === fy + 2) id = B.PLANKS;
           this.rawSet(x, y, z, id);
         }

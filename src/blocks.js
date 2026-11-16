@@ -10,7 +10,7 @@ export const B = {
   PRISM_TUFT: 31, MUSHROOM: 32, DEAD_BUSH: 33, FURNACE: 34, SNOWY_DIRT: 35, DARK_LEAVES: 36, PINE_LOG: 37,
   GLOWCAP: 38, CLOUD: 39, ASH: 40, LAVA: 41, EMBER_ORE: 42, CHEST: 43, CHEST_OPEN: 44, MAGMA: 45,
   SHADOW_GRASS: 46, SHADOW_STONE: 47, SHADOW_LOG: 48, SHADOW_LEAVES: 49, SHADOW_SHROOM: 50, SHADOW_THORN: 51,
-  FLOWER_BLUE: 52, FLOWER_PURPLE: 53,
+  FLOWER_BLUE: 52, FLOWER_PURPLE: 53, DOOR: 54,
 };
 
 // render: cube | cross | torch | water | none
@@ -76,6 +76,7 @@ def(B.SHADOW_SHROOM, 'Cogumelo Sombrio', Object.assign({ tex: 'shadow_shroom', e
 def(B.SHADOW_THORN, 'Espinho Sombrio', Object.assign({ tex: 'shadow_thorn', drop: 0 }, plant));
 def(B.FLOWER_BLUE, 'Flor Celeste', Object.assign({ tex: 'flower_blue' }, plant));
 def(B.FLOWER_PURPLE, 'Flor Violeta', Object.assign({ tex: 'flower_purple' }, plant));
+def(B.DOOR, 'Porta', { tex: ['planks', 'door', 'planks'], solid: false, opaque: false, filter: 0, hardness: 0.6, tool: 'axe' });
 def(B.CHEST, 'Baú', { tex: ['chest_top', 'chest_side', 'chest_top'], hardness: 1.0, tool: 'axe', drop: 0 });
 def(B.CHEST_OPEN, 'Baú Vazio', { tex: ['chest_top', 'chest_side_open', 'chest_top'], hardness: 1.0, tool: 'axe', drop: 0 });
 
@@ -381,6 +382,12 @@ function chestBase(p, open) {
 }
 tile('chest_side', (p) => chestBase(p, false));
 tile('chest_side_open', (p) => chestBase(p, true));
+tile('door', (p) => {
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) p.set(x, y, shade(PAL.planks[x % 5 === 0 ? 0 : 2], 0.92 + p.rand() * 0.1));
+  for (let i = 0; i < 16; i++) { p.set(0, i, '#4a2c14'); p.set(15, i, '#4a2c14'); p.set(i, 0, '#4a2c14'); p.set(i, 15, '#4a2c14'); }
+  p.rect(4, 3, 8, 4, '#8ad0f0'); p.rect(4, 3, 8, 1, '#c8f0ff'); p.rect(7, 3, 1, 4, '#4a2c14');
+  p.rect(12, 9, 2, 2, '#f2c94c');
+});
 tile('chest_top', (p) => { painters.planks(p); for (let i = 0; i < 16; i++) { p.set(0, i, '#c9a03a'); p.set(15, i, '#c9a03a'); p.set(i, 0, '#c9a03a'); p.set(i, 15, '#c9a03a'); } });
 
 // --- cross sprites (transparent)

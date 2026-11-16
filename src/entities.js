@@ -1,9 +1,10 @@
 // Creatures, NPC, boss, projectiles and item drops.
 import * as THREE from 'three';
-import { ModelAtlas, boxGeo, mergeGeos, modelMaterial, buildHumanoid, instHumanoid, noiseFill, extrudeSprite, blockItemGeo } from './models.js';
+import { ModelAtlas, boxGeo, mergeGeos, modelMaterial, buildHumanoid, instHumanoid, animateHumanoid, noiseFill, extrudeSprite, blockItemGeo } from './models.js';
 import { Painter, shade, mix } from './pixel.js';
 import { moveBody, canStep } from './physics.js';
 import { ITEMS, ITEM_BY_ID, itemPainter } from './items.js';
+import { H } from './world.js';
 import { BLOCKS } from './blocks.js';
 import { sfx } from './audio.js';
 
@@ -14,8 +15,9 @@ const tmp = new V();
 const protos = {};
 
 export const SKINS = {
-  player: { seed: 11, skin: '#e9b78f', hair: '#7a3b1c', eyes: '#3a7bd5', shirt: '#2f5fa8', shirt2: '#e8d9b0', pants: '#5a3e2b', boots: '#3a2618', belt: '#6b4520', buckle: '#f2c94c', backpack: true, pads: '#7a8696', emblem: '#f2c94c' },
-  bento: { seed: 21, skin: '#d9a07a', hair: '#e6e0d0', eyes: '#3a5a3a', shirt: '#c9b48a', vest: '#4f6b3a', pants: '#6b5038', boots: '#3a2618', belt: '#3a2618', buckle: '#c9c9c9', hat: '#8a6a3e', hatBand: '#5a2a1a', hairTuft: false, beard: '#e6e0d0', brow: '#bfb8a8', sleeve: 7 },
+  player: { seed: 11, skin: '#f0c09a', hair: '#8a4a22', eyes: '#2a8ad8', shirt: '#2f6ab8', shirt2: '#f2e6c8', pants: '#b8402e', boots: '#3a2618', belt: '#6b4520', buckle: '#f2c94c', backpack: true, scarf: '#e8b830', emblem: '#f2c94c', sleeve: 3 },
+  bento: { seed: 21, scarf: '#4f6b3a', skin: '#d9a07a', hair: '#e6e0d0', eyes: '#3a5a3a', shirt: '#c9b48a', vest: '#4f6b3a', pants: '#6b5038', boots: '#3a2618', belt: '#3a2618', buckle: '#c9c9c9', hat: '#8a6a3e', hatBand: '#5a2a1a', hairTuft: false, beard: '#e6e0d0', brow: '#bfb8a8', sleeve: 7 },
+  merchant: { seed: 41, skin: '#c98a62', hair: '#2a1a12', eyes: '#5a3a1a', shirt: '#7a3a8a', shirt2: '#f2c94c', vest: '#4a2a5a', pants: '#3a3a4a', boots: '#2a1a12', belt: '#c9a03a', buckle: '#f2c94c', hat: '#5a2a6a', hatBand: '#f2c94c', scarf: '#c9a03a', sleeve: 7 },
   walker: { seed: 31, skin: '#7f9a74', hair: '#2a2a22', eyes: '#000', glowEyes: '#ffe14a', shirt: '#5a6a80', pants: '#3a3550', boots: '#2a2620', belt: '#2a2620', torn: true, scar: true, sleeve: 3 },
 };
 
@@ -355,12 +357,10 @@ export class Walker extends Ent {
     if (this.inWater && chase) this.vel.y = Math.max(this.vel.y, 2.5);
     this.physics(dt);
     this.touchPlayer(dt);
-    this.walkT += dt * Math.hypot(this.vel.x, this.vel.z) * 2.2;
-    const s = Math.sin(this.walkT) * 0.6;
-    const P = this.rig.parts;
-    P.legL.rotation.x = s; P.legR.rotation.x = -s;
-    P.armL.rotation.x = -1.45 + s * 0.15; P.armR.rotation.x = -1.35 - s * 0.15;
-    P.head.rotation.z = Math.sin(this.walkT * 0.5) * 0.12;
+    const hs = Math.hypot(this.vel.x, this.vel.z);
+    this.walkT += dt;
+    animateHumanoid(this.rig, { dt, speed: hs, air: !this.onGround, vy: this.vel.y, armR: { x: -1.5 + Math.sin(this.walkT * 4) * 0.12, z: -0.1, fore: -0.1 }, armL: { x: -1.4 - Math.sin(this.walkT * 4) * 0.12, z: 0.1, fore: -0.1 }, headYaw: Math.sin(this.walkT * 1.3) * 0.25 });
+    this.rig.parts.head.rotation.z = Math.sin(this.walkT * 2) * 0.15;
     this.common(dt);
     if (this.game.daylightFactor > 0.7 && dist > 18) this.remove();
   }
@@ -428,10 +428,24 @@ export const BENTO_LINES = [
   'Ilhas flutuam acima dos campos. Empilhe blocos para alcançá-las!',
   'O mar ao redor da ilha não tem fim. Pelo menos foi o que me disseram.',
 ];
+export const MERCHANT_LINES = [
+  'Moedas na mão, mercadoria na bolsa! Dê uma olhada.',
+  'Ganchos, poções, tochas... tudo o que um aventureiro precisa.',
+  'Os baús do Submundo guardam tesouros que eu nem consigo vender.',
+  'Gosmas deixam moedas às vezes. Junte e volte aqui!',
+];
+export const NPC_KINDS = {
+  bento: { skin: 'bento', name: 'Bento, o Explorador', lines: BENTO_LINES, hp: 250 },
+  merchant: { skin: 'merchant', name: 'Lira, a Mercadora', lines: MERCHANT_LINES, hp: 250, shop: true },
+};
 export class NPC extends Ent {
-  constructor(game, x, y, z) {
+  constructor(game, x, y, z, kind = 'bento') {
     super(game, x, y, z);
-    const rig = instHumanoid(humanoid('bento'));
+    this.kind = kind;
+    const K = NPC_KINDS[kind];
+    this.lines = K.lines;
+    this.shop = !!K.shop;
+    const rig = instHumanoid(humanoid(K.skin));
     this.rig = rig;
     this.group.add(rig.group);
     this.mats.push(rig.material);
@@ -439,15 +453,16 @@ export class NPC extends Ent {
     this.hp = this.maxHp = 250;
     this.hostile = false;
     this.npc = true;
-    this.name = 'Bento, o Explorador';
+    this.name = K.name;
     this.home = new V(x, y, z);
     this.goal = null;
     this.idle = 2;
     this.walkT = 0;
-    this.label = nameLabel(`${this.name}: 250/250`);
+    this.label = nameLabel(this.name);
     this.label.position.y = 2.35;
     this.group.add(this.label);
     this.lineIdx = 0;
+    if (kind !== 'bento') return;
     // walking stick
     const stick = new Painter(16, 16, 3);
     stick.line(3, 15, 12, 1, '#7a4a20'); stick.set(12, 1, '#a06a34'); stick.set(11, 2, '#a06a34'); stick.outline('#2a1a10');
@@ -481,11 +496,8 @@ export class NPC extends Ent {
     this.vel.z += (mz * sp - this.vel.z) * Math.min(1, dt * 8);
     if (this.hitWall && this.onGround && (mx || mz)) this.vel.y = 8.6;
     this.physics(dt);
-    this.walkT += dt * Math.hypot(this.vel.x, this.vel.z) * 2.4;
-    const s = Math.sin(this.walkT) * 0.55;
-    const P = this.rig.parts;
-    P.legL.rotation.x = s; P.legR.rotation.x = -s; P.armL.rotation.x = -s * 0.7; P.armR.rotation.x = -0.4 + s * 0.3;
-    P.head.rotation.x = Math.sin(performance.now() / 900) * 0.05;
+    const hs = Math.hypot(this.vel.x, this.vel.z);
+    animateHumanoid(this.rig, { dt, speed: hs, air: !this.onGround, vy: this.vel.y, armR: { x: -0.5, z: -0.1, fore: -0.4 } });
     if (this.pos.distanceTo(this.home) > 25) this.pos.copy(this.home);
     this.common(dt);
   }
@@ -720,7 +732,8 @@ export class Projectile {
       if (!shardGeo) shardGeo = extrudeSprite(itemPainter(ITEMS.crystal.id), 0.9, 2);
       this.mesh = new THREE.Mesh(shardGeo, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }));
     } else {
-      this.mesh = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.28, 0.28), new THREE.MeshBasicMaterial({ color: '#bff8ff', fog: false }));
+      const col = kind === 'ember' ? '#ff7a1a' : kind === 'jelly' ? '#4fbde8' : '#bff8ff';
+      this.mesh = new THREE.Mesh(new THREE.BoxGeometry(kind === 'ember' ? 0.45 : 0.28, kind === 'ember' ? 0.45 : 0.28, kind === 'ember' ? 0.45 : 0.28), new THREE.MeshBasicMaterial({ color: col, fog: false }));
     }
     this.mesh.position.copy(pos);
     game.scene.add(this.mesh);
@@ -731,8 +744,8 @@ export class Projectile {
     this.pos.addScaledVector(this.vel, dt);
     this.mesh.position.copy(this.pos);
     this.mesh.rotation.x += dt * 10; this.mesh.rotation.y += dt * 7;
-    if (this.kind === 'bolt') {
-      const c = Math.random() < 0.5 ? new THREE.Color('#7fe6f5') : new THREE.Color('#f07bb0');
+    if (this.kind !== 'shard') {
+      const c = this.kind === 'ember' ? new THREE.Color(Math.random() < 0.5 ? '#ff7a1a' : '#ffd84a') : this.kind === 'jelly' ? new THREE.Color('#7fd2f5') : Math.random() < 0.5 ? new THREE.Color('#7fe6f5') : new THREE.Color('#f07bb0');
       g.particles.spawn(this.pos.x, this.pos.y, this.pos.z, (Math.random() - 0.5), (Math.random() - 0.5), (Math.random() - 0.5), c, 0.12, 0.4, 0, true);
     }
     if (g.world.isSolid(Math.floor(this.pos.x), Math.floor(this.pos.y), Math.floor(this.pos.z))) return this.kill(true);
@@ -812,4 +825,328 @@ export class Drop {
     if (this.age > 300) this.kill();
   }
   kill() { this.dead = true; this.game.scene.remove(this.mesh); }
+}
+
+// ------------------------------------------------------------ Gosma Anciã (giant jelly boss with a carved mask)
+function slimeBossProto() {
+  if (protos.slimeBoss) return protos.slimeBoss;
+  const atlas = new ModelAtlas(256, 13);
+  const S = 1 / 16;
+  const c = '#3fa8e8', cd = shade(c, 0.65), cl = shade(c, 1.35);
+  const jelly = (p) => {
+    for (let y = 0; y < p.h; y++) for (let x = 0; x < p.w; x++) p.set(x, y, mix(cl, cd, y / p.h * 0.9 + (p.rand() - 0.5) * 0.06));
+    for (let k = 0; k < p.w * p.h / 60; k++) p.set(p.ri(p.w), p.ri(p.h), shade(cl, 1.15));
+    p.rect(1, 1, 3, 1, '#ffffff'); p.set(1, 2, '#ffffff');
+  };
+  const body = mergeGeos([
+    boxGeo(atlas, [30, 22, 30], [-15, 0, -15], { all: jelly }, S),
+    boxGeo(atlas, [24, 5, 24], [-12, 22, -12], { all: jelly }, S),
+    boxGeo(atlas, [16, 3, 16], [-8, 27, -8], { all: jelly }, S),
+  ]);
+  const stone = (p) => { p.cobble(['#8a7a5a', '#9a8a68', '#a89a78'], '#4a3e2a', 4, 1.15); };
+  const maskFace = (p) => {
+    stone(p);
+    p.rect(2, 4, 5, 3, '#1a1408'); p.rect(11, 4, 5, 3, '#1a1408');
+    p.rect(3, 5, 2, 1, '#ff5ab8'); p.rect(13, 5, 2, 1, '#ff5ab8');
+    for (let x = 4; x < 14; x++) p.set(x, 11, '#1a1408');
+    for (let x = 4; x < 14; x += 2) { p.set(x, 12, '#e8dcc0'); p.set(x, 10, '#e8dcc0'); }
+    p.rect(8, 7, 2, 3, '#6a5a3a');
+    for (let x = 0; x < p.w; x++) { p.set(x, 0, '#c9a03a'); p.set(x, 1, '#e6c04a'); }
+  };
+  const mask = mergeGeos([
+    boxGeo(atlas, [18, 15, 2], [-9, 6, 15], { front: maskFace, all: stone }, S),
+    boxGeo(atlas, [3, 6, 3], [-9, 21, 14], { all: (p) => noiseFill(p, '#ef5fae', 0.1) }, S),
+    boxGeo(atlas, [3, 8, 3], [-1.5, 21, 14], { all: (p) => noiseFill(p, '#7fe6f5', 0.1) }, S),
+    boxGeo(atlas, [3, 6, 3], [6, 21, 14], { all: (p) => noiseFill(p, '#f2c94c', 0.1) }, S),
+  ]);
+  const core = boxGeo(atlas, [12, 10, 12], [-6, 5, -6], { all: (p) => { noiseFill(p, '#1a5a8a', 0.1); p.disc(6, 5, 3, '#ef5fae'); } }, S);
+  protos.slimeBoss = { atlas, body, mask, core };
+  return protos.slimeBoss;
+}
+
+export class SlimeBoss extends Ent {
+  constructor(game, x, y, z) {
+    super(game, x, y, z);
+    const P = slimeBossProto();
+    this.name = 'Gosma Anciã';
+    this.boss = true;
+    this.w = 3.6; this.h = 3.4;
+    this.hp = this.maxHp = 1400;
+    this.damage = 22;
+    const bodyMat = modelMaterial(P.atlas, { transparent: true, opacity: 0.82, alphaTest: 0 });
+    const solid = modelMaterial(P.atlas);
+    this.mats.push(bodyMat, solid);
+    this.model = new THREE.Group();
+    const core = new THREE.Mesh(P.core, solid), mask = new THREE.Mesh(P.mask, solid), body = new THREE.Mesh(P.body, bodyMat);
+    body.renderOrder = 1;
+    this.model.add(core, mask, body);
+    this.model.scale.setScalar(1.9);
+    this.group.add(this.model);
+    this.hopT = 2.5;
+    this.spawnStep = 0;
+    this.deathColors = [new THREE.Color('#3fa8e8'), new THREE.Color('#a5e0ff'), new THREE.Color('#ef5fae')];
+    if (this.shadow) { game.scene.remove(this.shadow); this.shadow = game.makeShadow(2.2); }
+    sfx('roar');
+  }
+  update(dt) {
+    const g = this.game, p = g.player;
+    if (p.dead) { g.message('A Gosma Anciã escorregou para longe...', '#a5e0ff'); this.remove(); return; }
+    const dx = p.pos.x - this.pos.x, dz = p.pos.z - this.pos.z, dist = Math.hypot(dx, dz);
+    const rage = this.hp < this.maxHp * 0.4;
+    if (this.onGround) {
+      if (this.wasAirB) { // landing shockwave
+        this.wasAirB = false; g.camShake = 0.35; sfx('slam');
+        for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; g.particles.spawn(this.pos.x + Math.cos(a) * 3, this.pos.y + 0.3, this.pos.z + Math.sin(a) * 3, Math.cos(a) * 6, 2, Math.sin(a) * 6, new THREE.Color('#7fd2f5'), 0.3, 0.6); }
+        if (dist < 5 && Math.abs(p.pos.y - this.pos.y) < 2) p.hurt(this.damage, new V(dx, 0, dz).normalize(), 10);
+      }
+      this.vel.x *= 0.8; this.vel.z *= 0.8;
+      this.hopT -= dt;
+      this.faceToward(p.pos.x, p.pos.z, dt, 3);
+      if (this.hopT <= 0) {
+        const big = Math.random() < 0.35;
+        const dir = new V(dx, 0, dz).normalize();
+        const spd = Math.min(9, dist * 0.9) + (rage ? 2 : 0);
+        this.vel.set(dir.x * spd, big ? 17 : 11, dir.z * spd);
+        this.hopT = rage ? 0.9 : 1.5;
+        if (dist > 30) { this.pos.set(p.pos.x + (Math.random() - 0.5) * 10, p.pos.y + 14, p.pos.z + (Math.random() - 0.5) * 10); g.message('A Gosma Anciã saltou atrás de você!', '#a5e0ff'); }
+      }
+    } else this.wasAirB = true;
+    this.physics(dt, 30);
+    this.touchPlayer(dt);
+    const sy = this.onGround ? 1 - Math.max(0, 0.35 - this.hopT) * 0.9 : 1 + Math.min(0.2, Math.abs(this.vel.y) * 0.02);
+    this.model.scale.set(1.9 / Math.sqrt(sy), 1.9 * sy, 1.9 / Math.sqrt(sy));
+    this.common(dt);
+  }
+  hurt(dmg, dir, knock) {
+    super.hurt(dmg, null, 0);
+    const step = Math.floor((1 - this.hp / this.maxHp) * 8);
+    while (this.spawnStep < step && !this.dead) {
+      this.spawnStep++;
+      this.game.addMob(new Gloop(this.game, this.pos.x + (Math.random() - 0.5) * 3, this.pos.y + 2, this.pos.z + (Math.random() - 0.5) * 3, 4, false, 1));
+    }
+  }
+  die() {
+    const g = this.game, c = new V(this.pos.x, this.pos.y + 2, this.pos.z);
+    sfx('boss_die');
+    g.camShake = 0.8;
+    for (let k = 0; k < 3; k++) g.particles.burst(c.x, c.y + k, c.z, this.deathColors, 25, 9, 0.3);
+    g.spawnDrop(ITEMS.jelly_core.id, 1, c.clone());
+    g.spawnDrop(ITEMS.gel.id, 25 + Math.floor(Math.random() * 15), c.clone());
+    g.spawnDrop(ITEMS.coin.id, 12, c.clone());
+    if (Math.random() < 0.6) g.spawnDrop(ITEMS.slime_staff.id, 1, c.clone());
+    if (Math.random() < 0.5) g.spawnDrop(ITEMS.light_feather.id, 1, c.clone());
+    g.spawnDrop(ITEMS.potion.id, 4, c.clone());
+    g.message('A Gosma Anciã foi derrotada!', '#a5e0ff');
+    g.stats.slimeKills = (g.stats.slimeKills || 0) + 1;
+    super.die();
+  }
+}
+
+// ------------------------------------------------------------ Serpente de Brasa (worm that swims through terrain)
+function serpentProto() {
+  if (protos.serpent) return protos.serpent;
+  const atlas = new ModelAtlas(256, 17);
+  const S = 1 / 12;
+  const scales = (p) => {
+    for (let y = 0; y < p.h; y++) for (let x = 0; x < p.w; x++) {
+      const row = Math.floor(y / 3), off = row % 2 ? 2 : 0;
+      const edge = (x + off) % 4 === 0 || y % 3 === 2;
+      p.set(x, y, edge ? '#4a1408' : mix('#c8400e', '#ff7a1a', p.rand() * 0.6));
+    }
+    for (let k = 0; k < 3; k++) p.set(p.ri(p.w), p.ri(p.h), '#ffd84a');
+  };
+  const belly = (p) => { for (let y = 0; y < p.h; y++) for (let x = 0; x < p.w; x++) p.set(x, y, y % 3 === 0 ? '#5a2a10' : '#e8a050'); };
+  const seg = mergeGeos([
+    boxGeo(atlas, [14, 14, 14], [-7, -7, -7], { all: scales, bottom: belly }, S),
+    boxGeo(atlas, [3, 5, 6], [-1.5, 7, -3], { all: (p) => noiseFill(p, '#2a0e06', 0.1) }, S),
+  ]);
+  const headFace = (p) => {
+    scales(p);
+    p.rect(2, 3, 4, 3, '#ffd84a'); p.rect(p.w - 6, 3, 4, 3, '#ffd84a'); p.set(3, 4, '#1a0804'); p.set(p.w - 4, 4, '#1a0804');
+    for (let x = 2; x < p.w - 2; x++) p.set(x, p.h - 4, '#1a0804');
+  };
+  const head = mergeGeos([
+    boxGeo(atlas, [18, 16, 18], [-9, -8, -9], { front: headFace, all: scales, bottom: belly }, S),
+    boxGeo(atlas, [16, 4, 8], [-8, -10, 7], { all: scales, top: (p) => { noiseFill(p, '#2a0e06'); for (let x = 1; x < p.w; x += 3) p.set(x, p.h - 1, '#fff6e0'); } }, S),
+    boxGeo(atlas, [2.5, 9, 2.5], [-7, 6, -6], { all: (p) => noiseFill(p, '#2a0e06', 0.1) }, S),
+    boxGeo(atlas, [2.5, 9, 2.5], [4.5, 6, -6], { all: (p) => noiseFill(p, '#2a0e06', 0.1) }, S),
+  ]);
+  const tail = boxGeo(atlas, [8, 8, 16], [-4, -4, -12], { all: scales }, S);
+  protos.serpent = { atlas, seg, head, tail };
+  return protos.serpent;
+}
+
+export class SerpentPart extends Ent {
+  constructor(game, parent, mesh) {
+    super(game, parent.pos.x, parent.pos.y, parent.pos.z);
+    this.parent = parent; this.boss = true; this.part = true;
+    this.w = 1.3; this.h = 1.3;
+    this.hostile = true; this.damage = 18;
+    this.group.add(mesh);
+    this.mats.push(mesh.material);
+    if (this.shadow) { game.scene.remove(this.shadow); this.shadow = null; }
+    this.name = parent.name;
+  }
+  get hp() { return this.parent ? this.parent.hp : 0; }
+  set hp(v) { /* shared health lives on the head */ }
+  get maxHp() { return this.parent ? this.parent.maxHp : 1; }
+  set maxHp(v) { }
+  hurt(dmg, dir) { this.parent.hurt(dmg * 0.9, dir); this.hurtT = 0.2; }
+  update(dt) { if (this.parent.dead) { this.remove(); return; } this.touchPlayer(dt); this.hurtT -= dt; }
+  tint(l) { super.tint(Math.max(0.8, l)); }
+}
+
+export class Serpent extends Ent {
+  constructor(game, x, y, z) {
+    super(game, x, y, z);
+    const P = serpentProto();
+    this.name = 'Serpente de Brasa';
+    this.boss = true;
+    this.w = 1.6; this.h = 1.6;
+    this.hp = this.maxHp = 2600;
+    this.damage = 28;
+    const mat = modelMaterial(P.atlas);
+    this.mats.push(mat);
+    this.headMesh = new THREE.Mesh(P.head, mat);
+    this.group.add(this.headMesh);
+    this.vel.set(0, -6, 0);
+    this.parts = [];
+    for (let i = 0; i < 18; i++) {
+      const m = new THREE.Mesh(i === 17 ? P.tail : P.seg, modelMaterial(P.atlas));
+      const sp = new SerpentPart(game, this, m);
+      sp.pos.set(x, y + i * 1.2, z);
+      this.parts.push(sp);
+      game.addMob(sp);
+    }
+    if (this.shadow) { game.scene.remove(this.shadow); this.shadow = null; }
+    this.t = 0;
+    this.deathColors = [new THREE.Color('#ff7a1a'), new THREE.Color('#ffd84a'), new THREE.Color('#c8400e')];
+    sfx('roar');
+  }
+  update(dt) {
+    const g = this.game, p = g.player;
+    if (p.dead) { g.message('A Serpente de Brasa mergulhou nas cinzas...', '#ffb02a'); this.remove(); return; }
+    this.t += dt;
+    const rage = this.hp < this.maxHp * 0.5;
+    const target = new V(p.pos.x, p.pos.y + 1, p.pos.z);
+    // dive below the player, then burst up through them
+    if (Math.sin(this.t * 0.9) > 0.3) target.y -= 8;
+    const want = target.sub(this.pos).normalize().multiplyScalar(rage ? 15 : 11.5);
+    this.vel.lerp(want, Math.min(1, dt * (rage ? 1.8 : 1.3)));
+    this.pos.addScaledVector(this.vel, dt);
+    this.pos.y = Math.max(2, Math.min(H_LIMIT, this.pos.y));
+    // dig sparks when inside terrain
+    if (g.world.isSolid(Math.floor(this.pos.x), Math.floor(this.pos.y), Math.floor(this.pos.z)) && Math.random() < 0.5) {
+      g.particles.burst(this.pos.x, this.pos.y, this.pos.z, [new THREE.Color('#5a4a48'), new THREE.Color('#ff7a1a')], 2, 4, 0.15);
+    }
+    this.group.position.copy(this.pos);
+    this.group.lookAt(this.pos.clone().add(this.vel));
+    let prev = this.pos;
+    for (const sp of this.parts) {
+      const d = sp.pos.clone().sub(prev);
+      const len = d.length() || 1;
+      sp.pos.copy(prev).addScaledVector(d, 1.25 / len);
+      sp.group.position.copy(sp.pos);
+      sp.group.lookAt(prev);
+      prev = sp.pos;
+    }
+    this.touchPlayer(dt);
+    this.hurtT -= dt;
+    // occasional ember spit
+    if (rage && Math.random() < dt * 0.8) {
+      const dir = new V(p.pos.x - this.pos.x, p.pos.y + 1 - this.pos.y, p.pos.z - this.pos.z).normalize();
+      g.addProjectile(new Projectile(g, this.pos.clone(), dir.multiplyScalar(14), 'enemy', 16, 'ember'));
+    }
+  }
+  hurt(dmg, dir) { super.hurt(dmg, null, 0); }
+  tint(l) { super.tint(Math.max(0.8, l)); }
+  die() {
+    const g = this.game;
+    sfx('boss_die'); g.camShake = 1;
+    for (const sp of this.parts) { g.particles.burst(sp.pos.x, sp.pos.y, sp.pos.z, this.deathColors, 8, 6, 0.2); sp.remove(); }
+    const c = this.pos.clone().add(new V(0, 1, 0));
+    if (g.world.isSolid(Math.floor(c.x), Math.floor(c.y), Math.floor(c.z))) c.copy(p_safe(g));
+    g.spawnDrop(ITEMS.ember_scale.id, 14 + Math.floor(Math.random() * 8), c.clone());
+    g.spawnDrop(ITEMS.coin.id, 25, c.clone());
+    g.spawnDrop(ITEMS.fire_potion.id, 3, c.clone());
+    if (Math.random() < 0.5) g.spawnDrop(ITEMS.lava_charm.id, 1, c.clone());
+    g.message('A Serpente de Brasa foi derrotada!', '#ffd84a');
+    g.stats.serpentKills = (g.stats.serpentKills || 0) + 1;
+    super.die();
+  }
+}
+const H_LIMIT = 100;
+function p_safe(g) { return new V(g.player.pos.x, g.player.pos.y + 1.5, g.player.pos.z); }
+
+// ------------------------------------------------------------ Aurora beam (six coloured rays that converge)
+const AURORA = ['#ff5a6a', '#ffb02a', '#f5ea3a', '#5ae07a', '#3ac8ff', '#a35ae0'];
+export class AuroraBeam {
+  constructor(game) {
+    this.game = game;
+    this.group = new THREE.Group();
+    this.rays = AURORA.map((c) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 1), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+      this.group.add(m);
+      return m;
+    });
+    this.core = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    this.glow = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: '#ff9ae0', transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    this.group.add(this.core, this.glow);
+    this.group.visible = false;
+    game.scene.add(this.group);
+    this.charge = 0; this.t = 0; this.tick = 0;
+  }
+  update(dt, active, origin, dir, damage) {
+    const g = this.game;
+    this.group.visible = active;
+    if (!active) { this.charge = Math.max(0, this.charge - dt * 3); return; }
+    this.t += dt;
+    this.charge = Math.min(1, this.charge + dt / 1.6);
+    // beam length: until a solid block (max 32)
+    const hit = raycastWorld(g.world, origin, dir, 32);
+    const len = hit ? hit : 32;
+    const conv = 1.2 + (1 - this.charge) * 4; // convergence distance
+    const up = Math.abs(dir.y) > 0.95 ? new V(1, 0, 0) : new V(0, 1, 0);
+    const side = new V().crossVectors(dir, up).normalize(), up2 = new V().crossVectors(side, dir).normalize();
+    const spread = 0.55 * (1 - this.charge * 0.7);
+    this.rays.forEach((r, i) => {
+      const a = this.t * (2 + this.charge * 6) + (i / 6) * Math.PI * 2;
+      const start = origin.clone().addScaledVector(side, Math.cos(a) * spread).addScaledVector(up2, Math.sin(a) * spread);
+      const end = origin.clone().addScaledVector(dir, conv);
+      const mid = start.clone().add(end).multiplyScalar(0.5);
+      r.position.copy(mid);
+      r.lookAt(end);
+      r.scale.set(1 + this.charge, 1 + this.charge, start.distanceTo(end));
+    });
+    const full = this.charge > 0.98;
+    const coreLen = Math.max(0.1, len - conv);
+    const coreMid = origin.clone().addScaledVector(dir, conv + coreLen / 2);
+    const w = 0.05 + this.charge * 0.2 + Math.sin(this.t * 30) * 0.015;
+    this.core.position.copy(coreMid); this.core.lookAt(origin.clone().addScaledVector(dir, len)); this.core.scale.set(w, w, coreLen);
+    this.glow.position.copy(coreMid); this.glow.quaternion.copy(this.core.quaternion); this.glow.scale.set(w * 1.8, w * 1.8, coreLen);
+    this.glow.material.color.set(AURORA[Math.floor(this.t * 12) % 6]);
+    // end sparks
+    const endP = origin.clone().addScaledVector(dir, len);
+    if (Math.random() < 0.8) g.particles.spawn(endP.x, endP.y, endP.z, (Math.random() - 0.5) * 6, Math.random() * 4, (Math.random() - 0.5) * 6, new THREE.Color(AURORA[Math.floor(Math.random() * 6)]), 0.15, 0.4, 0, true);
+    // damage ticks
+    this.tick -= dt;
+    if (this.tick <= 0) {
+      this.tick = 0.1;
+      const dmg = damage * (0.3 + this.charge * 1.7);
+      for (const m of g.mobs) {
+        if (m.dead || m.npc) continue;
+        const c = new V(m.pos.x, m.pos.y + m.h / 2, m.pos.z);
+        const t = c.clone().sub(origin).dot(dir);
+        if (t < 0 || t > len) continue;
+        const closest = origin.clone().addScaledVector(dir, t);
+        if (closest.distanceTo(c) < m.w / 2 + w + 0.3) m.hurt(dmg, dir.clone().setY(0).normalize(), full ? 1 : 0);
+      }
+    }
+  }
+}
+function raycastWorld(world, o, d, max) {
+  for (let t = 0.5; t < max; t += 0.25) {
+    if (world.isSolid(Math.floor(o.x + d.x * t), Math.floor(o.y + d.y * t), Math.floor(o.z + d.z * t))) return t;
+  }
+  return null;
 }

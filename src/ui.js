@@ -1,5 +1,6 @@
 // DOM HUD: hotbar, vitals, boss bar, messages, inventory + crafting, NPC dialog, menus.
-import { ITEM_BY_ID, RECIPES, itemIcon, itemName } from './items.js';
+import { ITEM_BY_ID, ITEMS, RECIPES, BUFFS, itemIcon, itemName } from './items.js';
+import { EQUIP_START, EQUIP_KINDS } from './player.js';
 import { Painter } from './pixel.js';
 import { sfx } from './audio.js';
 
@@ -44,7 +45,17 @@ export class UI {
     this.craftList = $('#craftlist');
     this.stationTxt = $('#stations');
     this.invSlots = [];
-    for (let i = 0; i < 36; i++) {
+    const eqRow = document.getElementById('equipgrid');
+    const eqNames = { head: 'Cabeça', body: 'Corpo', legs: 'Pernas', acc: 'Acessório' };
+    for (let i = 0; i < 43; i++) {
+      if (i >= EQUIP_START) {
+        const s = h('button', 'slot eq');
+        s.innerHTML = `<span class="num">${eqNames[EQUIP_KINDS[i - EQUIP_START]]}</span><img alt=""><span class="cnt"></span>`;
+        s.addEventListener('click', () => this.clickInv(i));
+        eqRow.appendChild(s);
+        this.invSlots.push(s);
+        continue;
+      }
       const s = h('button', 'slot' + (i < 9 ? ' hot' : ''));
       s.innerHTML = '<img alt=""><span class="cnt"></span>';
       s.addEventListener('click', () => this.clickInv(i));
@@ -101,9 +112,13 @@ export class UI {
         const k = Math.min(a.count, inv.max(b.id) - b.count);
         b.count += k; a.count -= k;
         if (!a.count) inv.slots[this.invSel] = null;
-      } else { inv.slots[this.invSel] = b; inv.slots[i] = a; }
+      } else {
+        if (!inv.fits(i, a && a.id) || !inv.fits(this.invSel, b && b.id)) { this.message('Esse item não vai nesse espaço.', '#ff9aaa'); this.invSel = -1; inv.changed(); return; }
+        inv.slots[this.invSel] = b; inv.slots[i] = a;
+      }
       this.invSel = -1;
     }
+    this.game.player.recalcStats();
     inv.changed();
   }
   dropSelected() {
@@ -123,6 +138,16 @@ export class UI {
     inv.changed();
   }
 
+  icon(id) { return itemIcon(id); }
+  renderBuffs() {
+    const p = this.game.player;
+    const html = p.buffs.map((b) => { const B = BUFFS[b.key]; const pot = Object.values(ITEMS).find((it) => it.buff === b.key); const t = b.time > 60 ? `${Math.ceil(b.time / 60)}m` : `${Math.ceil(b.time)}s`; return `<div class="buff" title="${B.name}"><img src="${pot ? itemIcon(pot.id) : ''}" alt=""><span>${t}</span></div>`; }).join('');
+    if (html !== this.lastBuffs) { this.lastBuffs = html; document.getElementById('buffs').innerHTML = html; }
+    const st = p.stats;
+    const d = document.getElementById('defense');
+    const txt = st.defense ? `Defesa ${st.defense}` : '';
+    if (d.textContent !== txt) d.textContent = txt;
+  }
   renderCraft() {
     const g = this.game, inv = g.player.inv;
     const st = g.nearStations();
@@ -131,8 +156,21 @@ export class UI {
     const rows = RECIPES.map((r, i) => {
       const stationOk = !r.station || st[r.station];
       const haveAll = r.in.every(([it, n]) => inv.count(it.id) >= n);
-      return { r, i, ok: stationOk && haveAll, stationOk, haveAll };
+      return { r, i, ok: g.settings.creative || (stationOk && haveAll), stationOk, haveAll };
     }).sort((a, b) => (b.ok - a.ok) || (b.stationOk - a.stationOk));
+    if (g.settings.creative) {
+      const all = h('div', 'creative');
+      all.innerHTML = '<div class="help">Modo criativo: toque para pegar.</div>';
+      const grid = h('div', 'cgrid');
+      for (const it of Object.values(ITEMS)) {
+        const b = h('button', 'slot'); b.title = it.name;
+        b.innerHTML = `<img src="${itemIcon(it.id)}" alt="">`;
+        b.addEventListener('click', () => { inv.add(it.id, it.stack > 1 ? Math.min(it.stack, 30) : 1); this.pickup(it.id, 1); });
+        grid.appendChild(b);
+      }
+      all.appendChild(grid);
+      frag.appendChild(all);
+    }
     for (const { r, i, ok, stationOk } of rows) {
       const row = h('div', 'recipe' + (ok ? ' ok' : ''));
       const out = h('div', 'rout');
@@ -163,10 +201,11 @@ export class UI {
     if (mana !== this.lastMana) {
       this.lastMana = mana;
       let html = '';
-      for (let i = 0; i < Math.ceil(p.maxMana / 20); i++) html += `<img src="${mana - i * 20 >= 10 ? starFull : starEmpty}" alt="">`;
+      for (let i = 0; i < Math.ceil((p.maxManaTotal || p.maxMana) / 20); i++) html += `<img src="${mana - i * 20 >= 10 ? starFull : starEmpty}" alt="">`;
       this.stars.innerHTML = html;
       this.manaTxt.textContent = `Mana ${mana}`;
     }
+    this.renderBuffs();
     // boss bar
     const b = g.boss && !g.boss.dead ? g.boss : null;
     this.bossbar.hidden = !b;
