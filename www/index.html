@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#12151c">
+<title>EvoLab</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<section id="home" class="screen">
+  <header class="hero">
+    <h1>Evo<span>Lab</span></h1>
+    <p>Monte um jogo, solte as IAs e veja elas aprenderem geração após geração.</p>
+  </header>
+  <h2>Seus jogos</h2>
+  <div id="games"></div>
+  <h2>Criar jogo novo</h2>
+  <div id="templates"></div>
+</section>
+
+<section id="editor" class="screen" hidden>
+  <nav><button data-back>‹ Voltar</button><span>Editor</span><i></i></nav>
+  <div class="pad">
+    <label class="field">Nome do jogo<input id="edName" maxlength="30" autocomplete="off"></label>
+    <p class="hint" id="edDesc"></p>
+    <div id="edTrackBox">
+      <h3>Obstáculos</h3>
+      <div class="seg" id="edMode">
+        <button data-m="random">Aleatórios</button>
+        <button data-m="track">Pista montada</button>
+      </div>
+      <div class="chips" id="edPieces"></div>
+      <div id="trackWrap"><canvas id="track"></canvas></div>
+      <p class="hint" id="trackHint"></p>
+    </div>
+    <h3>Regras</h3>
+    <div id="edParams"></div>
+    <div class="actions">
+      <button id="edTrain" class="primary">Treinar IAs</button>
+      <button id="edPlay">Jogar eu mesmo</button>
+      <button id="edDup">Duplicar</button>
+      <button id="edDel" class="danger">Excluir</button>
+    </div>
+  </div>
+</section>
+
+<section id="run" class="screen" hidden>
+  <nav><button data-back>‹ Voltar</button><span id="runTitle"></span><button id="runEdit">Editar</button></nav>
+  <div id="runBody">
+    <div id="stage">
+      <canvas id="cv"></canvas>
+      <div id="overMsg" hidden></div>
+    </div>
+    <div id="side">
+      <div id="playCtl"></div>
+      <div id="trainCtl">
+        <div class="row">
+          <button id="btPause" class="icon">⏸</button>
+          <div class="seg grow" id="speeds">
+            <button data-s="1">1x</button><button data-s="2">2x</button><button data-s="5">5x</button><button data-s="20">20x</button><button data-s="max">MAX</button>
+          </div>
+        </div>
+        <div class="stats">
+          <div><b id="stGen">1</b><span>Geração</span></div>
+          <div><b id="stAlive">0</b><span>Vivas</span></div>
+          <div><b id="stScore">0</b><span>Pontos</span></div>
+          <div><b id="stRec">0</b><span>Recorde</span></div>
+        </div>
+        <div class="row">
+          <span class="lbl">Seguir</span>
+          <button id="btPrev" class="icon">◀</button>
+          <button id="btBest" class="grow">Melhor</button>
+          <button id="btNext" class="icon">▶</button>
+          <button id="btSolo">Só ela</button>
+        </div>
+        <p class="hint">Toque numa IA no jogo pra seguir ela. <span id="stWho"></span></p>
+        <div class="panels">
+          <div><h3>Cérebro da IA seguida</h3><canvas id="nn"></canvas></div>
+          <div><h3>Evolução <small><i class="k1"></i>melhor <i class="k2"></i>média</small></h3><canvas id="graph"></canvas></div>
+        </div>
+        <details>
+          <summary>Ajustes do treino</summary>
+          <div id="cfg"></div>
+          <div class="actions">
+            <button id="btSkip">Pular geração</button>
+            <button id="btReset" class="danger">Zerar treino</button>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="js/core.js"></script>
+<script src="js/games.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

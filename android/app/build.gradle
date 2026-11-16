@@ -1,0 +1,26 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.evolab.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.evolab.app'
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+    }
+
+    // o jogo inteiro é a pasta www/ na raiz do repositório
+    sourceSets {
+        main.assets.srcDirs = ["$rootDir/../www"]
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
