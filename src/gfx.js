@@ -67,7 +67,8 @@ function ramp(tones) {
   return tex;
 }
 export const RAMP_HARD = ramp([0.42, 0.68, 0.9, 1.0]);   // máquinas: faixas bem marcadas
-export const RAMP_SOFT = ramp([0.6, 0.78, 0.92, 1.0]);   // chão e vegetação: mais suave
+export const RAMP_SOFT = ramp([0.5, 0.74, 0.92, 1.0]);   // vegetação: mais suave
+export const RAMP_GROUND = (() => { const t = ramp([0.3, 0.55, 0.8, 0.95, 1.0]); t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true; return t; })();
 export const toon = (o, soft = false) => new THREE.MeshToonMaterial({ gradientMap: soft ? RAMP_SOFT : RAMP_HARD, ...o });
 
 // vidro estilizado: azul escuro com reflexo em faixa diagonal

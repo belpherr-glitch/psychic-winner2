@@ -2,7 +2,7 @@
 // Material solto escorrega até o ângulo de repouso (autômato celular por chunks ativos).
 import * as THREE from 'three';
 import { clamp, lerp, smooth, rng, makeNoise, fbm } from './util.js';
-import { toon, RAMP_SOFT } from './gfx.js';
+import { toon, RAMP_GROUND } from './gfx.js';
 
 export const N = 160;            // células por lado
 export const G = N + 1;          // vértices por lado
@@ -134,7 +134,7 @@ geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), HALF * 1.6);
 
 export const terrainMesh = new THREE.Mesh(
   geo,
-  toon({ vertexColors: true, map: grainTex, normalMap: grainNormal, normalScale: new THREE.Vector2(0.9, 0.9) }, true)
+  toon({ vertexColors: true, map: grainTex, normalMap: grainNormal, normalScale: new THREE.Vector2(0.9, 0.9), gradientMap: RAMP_GROUND })
 );
 terrainMesh.receiveShadow = true;
 terrainMesh.frustumCulled = false;
