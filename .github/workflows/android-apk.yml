@@ -1,0 +1,69 @@
+name: APK Android
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Compilar o jogo (web)
+        run: npm run build
+
+      - name: Sincronizar com o projeto Android
+        run: npx cap sync android
+
+      - name: Gerar APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Renomear APK
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/debug/app-debug.apk "out/TerraPesada-${GITHUB_RUN_NUMBER}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TerraPesada-apk
+          path: out/*.apk
+
+      - name: Publicar na página de Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: Terra Pesada · build ${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          body: |
+            APK de teste do Terra Pesada (branch `${{ github.ref_name }}`).
+            Baixe o arquivo `.apk` abaixo no celular e toque para instalar
+            (permita "instalar apps de fontes desconhecidas" se o Android pedir).
+          files: out/*.apk

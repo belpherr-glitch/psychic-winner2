@@ -1,0 +1,8 @@
+{
+  "appId": "br.terrapesada.jogo",
+  "appName": "Terra Pesada",
+  "webDir": "dist",
+  "android": {
+    "backgroundColor": "#15171a"
+  }
+}

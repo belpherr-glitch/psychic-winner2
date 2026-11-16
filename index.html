@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#15171a" />
+  <title>Terra Pesada</title>
+</head>
+<body>
+  <div id="app">
+    <canvas id="c"></canvas>
+    <div id="touch"></div>
+
+    <!-- HUD em jogo -->
+    <div id="hud" hidden>
+      <div class="top">
+        <div class="cash"><span class="lbl">Saldo</span><b id="money">R$ 0</b></div>
+        <div class="job" id="jobBox">
+          <div class="job-title" id="jobTitle"></div>
+          <div class="bar"><i id="jobBar"></i><s id="jobGoal"></s></div>
+          <div class="job-info"><span id="jobInfo"></span><span class="legend" id="jobLegend"></span></div>
+        </div>
+        <div class="tbtns">
+          <button class="ibtn" id="bCam" aria-label="Trocar câmera">
+            <svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>
+            <span>Câmera</span>
+          </button>
+          <button class="ibtn" id="bSwitch" aria-label="Trocar de máquina">
+            <svg viewBox="0 0 24 24"><path d="M4 9h13l-3-3M20 15H7l3 3" /></svg>
+            <span>Máquina</span>
+          </button>
+          <button class="ibtn" id="bMenu" aria-label="Menu">
+            <svg viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h14" /></svg>
+            <span>Menu</span>
+          </button>
+        </div>
+      </div>
+
+      <button id="bFinish" class="finish" hidden>Entregar serviço</button>
+
+      <div class="gauge" id="gauge">
+        <div class="g-name" id="gName">Carregadeira</div>
+        <div class="g-row">
+          <div class="g-speed"><b id="gSpeed">0</b><span>km/h</span></div>
+          <div class="g-load" id="gLoadWrap">
+            <span id="gLoadLbl">Caçamba</span>
+            <div class="g-bar"><i id="gLoad"></i></div>
+            <span id="gLoadTxt">0,0 m³</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="stick" id="stickL">
+        <div class="ring"></div><div class="knob"></div>
+        <span class="tag">Dirigir</span>
+      </div>
+      <div class="stick right" id="stickR">
+        <div class="ring"></div><div class="knob"></div>
+        <span class="lab t" id="labT">Subir</span>
+        <span class="lab b" id="labB">Descer</span>
+        <span class="lab l" id="labL">Recolher</span>
+        <span class="lab r" id="labR">Despejar</span>
+      </div>
+      <div id="toast" hidden></div>
+    </div>
+
+    <!-- Tela inicial -->
+    <section class="screen title" id="sTitle">
+      <div class="title-wrap">
+        <div class="stripe"></div>
+        <h1>TERRA<br />PESADA</h1>
+        <p class="sub">Terraplanagem · Escavação · Transporte</p>
+        <div class="tbtn-row">
+          <button class="big" id="tPlay">Ver contratos</button>
+          <button class="ghost" id="tShop">Garagem</button>
+        </div>
+        <p class="hint">Gire o celular na horizontal. Joystick esquerdo dirige; o direito opera braço, caçamba, lâmina e báscula.</p>
+      </div>
+    </section>
+
+    <!-- Contratos -->
+    <section class="screen panel" id="sJobs" hidden>
+      <header class="ph">
+        <div>
+          <span class="eyebrow">Escritório</span>
+          <h2>Contratos disponíveis</h2>
+        </div>
+        <div class="ph-right">
+          <span class="cash-pill" id="jobsMoney">R$ 0</span>
+          <button class="ghost sm" id="jShop">Garagem</button>
+          <button class="ghost sm" id="jBack">Início</button>
+        </div>
+      </header>
+      <div class="cards" id="jobList"></div>
+    </section>
+
+    <!-- Garagem -->
+    <section class="screen panel" id="sShop" hidden>
+      <header class="ph">
+        <div>
+          <span class="eyebrow">Garagem</span>
+          <h2>Frota de máquinas</h2>
+        </div>
+        <div class="ph-right">
+          <span class="cash-pill" id="shopMoney">R$ 0</span>
+          <button class="ghost sm" id="sBack">Voltar</button>
+        </div>
+      </header>
+      <div class="cards" id="shopList"></div>
+    </section>
+
+    <!-- Pausa -->
+    <section class="screen modal" id="sPause" hidden>
+      <div class="sheet">
+        <h2>Pausa</h2>
+        <button class="big" id="pResume">Continuar</button>
+        <button class="ghost" id="pReset">Reposicionar máquina</button>
+        <button class="ghost" id="pSound">Som: ligado</button>
+        <button class="ghost" id="pQuality">Gráficos: alto</button>
+        <button class="ghost danger" id="pQuit">Sair do serviço</button>
+      </div>
+    </section>
+
+    <!-- Serviço concluído -->
+    <section class="screen modal" id="sDone" hidden>
+      <div class="sheet done">
+        <span class="eyebrow">Serviço entregue</span>
+        <h2 id="dTitle"></h2>
+        <dl class="receipt">
+          <div><dt>Valor do contrato</dt><dd id="dPay"></dd></div>
+          <div><dt>Bônus de qualidade</dt><dd id="dBonus"></dd></div>
+          <div><dt>Tempo de obra</dt><dd id="dTime"></dd></div>
+          <div class="total"><dt>Total recebido</dt><dd id="dTotal"></dd></div>
+        </dl>
+        <button class="big" id="dOk">Voltar ao escritório</button>
+      </div>
+    </section>
+
+    <div id="rotate" hidden>
+      <svg viewBox="0 0 48 48"><rect x="14" y="6" width="20" height="36" rx="3" /><path d="M8 30a16 16 0 0 0 10 12M40 18A16 16 0 0 0 30 6" /></svg>
+      <p>Gire o celular para jogar na horizontal</p>
+      <button class="ghost sm" id="rotOk">Jogar assim mesmo</button>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

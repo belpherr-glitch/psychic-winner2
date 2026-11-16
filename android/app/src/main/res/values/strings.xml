@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Terra Pesada</string>
+    <string name="title_activity_main">Terra Pesada</string>
+    <string name="package_name">br.terrapesada.jogo</string>
+    <string name="custom_url_scheme">br.terrapesada.jogo</string>
+</resources>
