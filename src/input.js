@@ -28,10 +28,17 @@ export class Input {
   down(e) {
     this.first();
     const w = innerWidth, h = innerHeight;
-    const low = e.clientY > h * 0.36;
+    // joysticks só nos cantos de baixo; todo o resto da tela gira a câmera
+    const zoneW = Math.min(w * 0.3, 260), zoneH = Math.min(h * 0.55, 300);
+    const low = e.clientY > h - zoneH;
     let s = null;
-    if (low && e.clientX < w * 0.45 && this.L.id === null) s = this.L;
-    else if (low && e.clientX > w * 0.55 && this.R.id === null) s = this.R;
+    if (low && e.clientX < zoneW && this.L.id === null) s = this.L;
+    else if (low && e.clientX > w - zoneW && this.R.id === null) s = this.R;
+    if (!s) {
+      const now = performance.now();
+      if (now - (this.lastTap || 0) < 280 && this.cam.size === 0) this.recenter = true;
+      this.lastTap = now;
+    }
     try { this.layer.setPointerCapture(e.pointerId); } catch (_) { /* sem captura */ }
     if (s) {
       s.id = e.pointerId;

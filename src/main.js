@@ -15,6 +15,7 @@ import { JOBS, STAGING, Job } from './contracts.js';
 import { makeSky, makeLights, makeWater, makeOuter, addTreeMeshes, placeTrees, makeClouds } from './world.js';
 import { Input } from './input.js';
 import { Sound } from './audio.js';
+import { setOwnerEnabled, grainMesh, stepGrains, renderGrains, clearGrains, setBakeHook, setGrainCap, grainCap, grainCount } from './grains.js';
 import * as TER from './terrain.js';
 
 const $ = (s) => document.querySelector(s);
@@ -22,7 +23,7 @@ const $ = (s) => document.querySelector(s);
 /* ================= salvamento ================= */
 const SAVE_KEY = 'terra-pesada-v1';
 const save = (() => {
-  const def = { money: 800, owned: ['loader', 'truck'], done: {}, sound: true, quality: 'high', tut: {} };
+  const def = { money: 800, owned: ['loader', 'truck'], done: {}, sound: true, quality: 'auto', tut: {} };
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
     return s ? { ...def, ...s } : def;
@@ -44,15 +45,45 @@ const water = makeWater(scene);
 makeOuter(scene);
 addTreeMeshes(scene);
 const clouds = makeClouds(scene);
-scene.add(terrainMesh, tuftMesh, particleMesh, dustMesh);
+scene.add(terrainMesh, tuftMesh, particleMesh, dustMesh, grainMesh);
+
+/* ---------- desempenho adaptativo (resolução, sombras, grãos) ---------- */
+const PR = [0.55, 0.65, 0.75, 0.85, 1.0, 1.25, 1.5];
+let prLevel = 4, perfT = 0, perfN = 0, perfSum = 0;
+function perf(dt) {
+  if (save.quality !== 'auto') return;
+  perfSum += dt; perfN++; perfT += dt;
+  if (perfT < 2) return;
+  const avg = perfSum / perfN;
+  perfT = 0; perfN = 0; perfSum = 0;
+  const maxLevel = Math.max(0, PR.findIndex((x) => x >= Math.min(devicePixelRatio || 1, 1.5)));
+  if (avg > 1 / 40) {
+    if (prLevel > 0) prLevel--;
+    else if (lights.sun.castShadow) { lights.sun.castShadow = false; }
+    if (avg > 1 / 30) setGrainCap(grainCap() * 0.85);
+  } else if (avg < 1 / 57) {
+    if (!lights.sun.castShadow && prLevel >= 2) lights.sun.castShadow = true;
+    else if (prLevel < maxLevel) prLevel++;
+    setGrainCap(grainCap() * 1.05);
+  }
+  renderer.setPixelRatio(PR[prLevel]);
+  resize();
+}
 
 function applyQuality() {
-  const hi = save.quality === 'high';
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, hi ? 1.75 : 1));
-  lights.sun.shadow.mapSize.set(hi ? 2048 : 1024, hi ? 2048 : 1024);
+  const q = save.quality;
+  const mobile = matchMedia('(pointer: coarse)').matches;
+  if (q === 'high') { prLevel = 6; lights.sun.castShadow = true; setGrainCap(3000); }
+  else if (q === 'low') { prLevel = 1; lights.sun.castShadow = false; setGrainCap(1400); }
+  else { prLevel = mobile ? 3 : 4; lights.sun.castShadow = true; setGrainCap(mobile ? 1800 : 2600); }
+  renderer.setPixelRatio(Math.min(PR[prLevel], Math.max(1, devicePixelRatio || 1)));
+  renderer.shadowMap.type = q === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+  const sm = q === 'high' ? 2048 : 1024;
+  lights.sun.shadow.mapSize.set(sm, sm);
   if (lights.sun.shadow.map) { lights.sun.shadow.map.dispose(); lights.sun.shadow.map = null; }
-  tuftMesh.visible = true;
-  $('#pQuality').textContent = 'Gráficos: ' + (hi ? 'alto' : 'leve');
+  tuftMesh.visible = q !== 'low';
+  renderer.shadowMap.needsUpdate = true;
+  $('#pQuality').textContent = 'Gráficos: ' + ({ auto: 'automático', high: 'alto', low: 'leve' }[q] || 'automático');
   resize();
 }
 function resize() {
@@ -84,6 +115,7 @@ addCatcher((x, y, z, v, m) => {
   return false;
 });
 setLandHook((x, z, v) => { if (job) job.onLand(x, z, v); });
+setBakeHook((x, z, v) => { if (job) job.onLand(x, z, v); });
 
 function getVehicle(id) {
   if (!fleet[id]) fleet[id] = new Vehicle(id, scene);
@@ -94,6 +126,7 @@ function getVehicle(id) {
 function buildSite(def, seed) {
   if (job) { job.dispose(); job = null; }
   clearParticles();
+  clearGrains();
   clearDust();
   resetRelax();
   baseTerrain(seed, def.soil);
@@ -110,12 +143,13 @@ function buildSite(def, seed) {
   job = new Job(def, spec, ctx, scene);
   job.evaluate();
   // frota disponível no pátio
-  for (const v of Object.values(fleet)) v.root.visible = false;
+  for (const v of Object.values(fleet)) { v.root.visible = false; setOwnerEnabled(v.root, false); }
   world.vehicles = [];
   const order = ['loader', 'truck', 'dozer', 'skid'].filter((id) => save.owned.includes(id));
   order.forEach((id, k) => {
     const v = getVehicle(id);
     v.root.visible = true;
+    setOwnerEnabled(v.root, true);
     v.load = 0; v.tilt = 0; v.resist = 0; v.steerA = 0;
     v.lift = v.kind === 'dozer' ? 0.3 : v.liftMin + 0.3;
     v.curl = 0.12;
@@ -175,17 +209,32 @@ function updateCamera(dt) {
   }
   camera.near = 0.1;
   const high = cam.mode === 'high';
-  cam.off -= c.dx * 0.006;
-  cam.pitch = clamp(cam.pitch + c.dy * 0.004, 0.08, 1.35);
+  const touching = input.cam.size > 0;
+  // arrasto direto (1:1 com o dedo) + inércia ao soltar
+  const rotK = 0.0062;
+  if (touching || Math.abs(c.dx) + Math.abs(c.dy) > 0) {
+    cam.yaw -= c.dx * rotK;
+    cam.pitch = clamp(cam.pitch + c.dy * 0.0045, 0.1, 1.3);
+    if (dt > 0) cam.spin = lerp(cam.spin || 0, (-c.dx * rotK) / dt, 0.5);
+  }
+  if (touching) cam.idle = 0;
+  else {
+    cam.idle += dt;
+    cam.yaw += (cam.spin || 0) * dt;
+    cam.spin = (cam.spin || 0) * Math.exp(-dt * 5);
+  }
   cam.dist = clamp(cam.dist + c.zoom, 6, 34);
-  if (Math.abs(c.dx) + Math.abs(c.dy) > 0.5) cam.idle = 0; else cam.idle += dt;
-  if (cam.idle > 2.5 && Math.abs(v.speed) > 0.6) cam.off = lerp(cam.off, 0, Math.min(1, dt * 1.2));
-  const back = v.speed < -0.5 && cam.idle > 1 ? 0 : Math.PI;
-  const wantYaw = v.yaw + back + cam.off;
-  cam.yaw += wrapA(wantYaw - cam.yaw) * Math.min(1, dt * (cam.snap ? 60 : 3.2));
+  // volta para trás da máquina só depois de um tempo sem tocar e andando pra frente
+  if (cam.idle > 3 && v.speed > 1) {
+    const d = wrapA(v.yaw + Math.PI - cam.yaw);
+    cam.yaw += clamp(d, -1, 1) * Math.min(1, dt * 0.9);
+  }
+  if (input.recenter) { input.recenter = false; cam.spin = 0; cam.recenter = 0.6; }
+  if (cam.recenter > 0) { cam.recenter -= dt; cam.yaw += wrapA(v.yaw + Math.PI - cam.yaw) * Math.min(1, dt * 8); }
+  if (cam.snap) cam.yaw = v.yaw + Math.PI;
   const pitch = high ? Math.max(cam.pitch, 1.0) : cam.pitch;
   const dist = high ? cam.dist * 1.7 : cam.dist;
-  cam.tgt.set(v.x + v.fx * 1.8, v.y + (v.kind === 'truck' ? 2.4 : 1.9), v.z + v.fz * 1.8);
+  cam.tgt.set(v.x + v.fx * 1.5, v.y + (v.kind === 'truck' ? 2.4 : 1.8), v.z + v.fz * 1.5);
   _p.set(
     cam.tgt.x + Math.sin(cam.yaw) * Math.cos(pitch) * dist,
     cam.tgt.y + Math.sin(pitch) * dist,
@@ -193,7 +242,7 @@ function updateCamera(dt) {
   );
   const gy = Math.max(heightAt(_p.x, _p.z), WATER_Y) + 1.0;
   if (_p.y < gy) _p.y = gy;
-  if (cam.snap) { cam.pos.copy(_p); cam.snap = false; } else cam.pos.lerp(_p, Math.min(1, dt * 7));
+  if (cam.snap) { cam.pos.copy(_p); cam.snap = false; } else cam.pos.lerp(_p, Math.min(1, dt * 14));
   camera.position.copy(cam.pos);
   camera.lookAt(cam.tgt);
 }
@@ -303,7 +352,7 @@ function machineThumbs() {
   sc.add(d);
   const cm = new THREE.PerspectiveCamera(30, 2, 0.1, 100);
   for (const id of Object.keys(MACHINES)) {
-    const v = new Vehicle(id, sc);
+    const v = new Vehicle(id, sc, false);
     v.x = 0; v.z = 0; v.y = 0; v.yaw = -0.7;
     if (v.kind !== 'truck' && v.kind !== 'dozer') { v.lift = 0.15; v.curl = 0.2; }
     v.sync();
@@ -419,7 +468,7 @@ tap('#pSound', () => {
   sound.setEnabled(save.sound);
   $('#pSound').textContent = 'Som: ' + (save.sound ? 'ligado' : 'desligado');
 });
-tap('#pQuality', () => { save.quality = save.quality === 'high' ? 'low' : 'high'; persist(); applyQuality(); });
+tap('#pQuality', () => { save.quality = { auto: 'high', high: 'low', low: 'auto' }[save.quality] || 'auto'; persist(); applyQuality(); });
 tap('#pQuit', () => { openJobs(); buildSite(JOBS.find((j) => j.id === 'livre'), 7); });
 tap('#bFinish', finishJob);
 tap('#dOk', () => { openJobs(); buildSite(JOBS.find((j) => j.id === 'livre'), 7); });
@@ -446,7 +495,7 @@ const NONE = { thr: 0, steer: 0, ty: 0, tx: 0 };
 
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = Math.min(0.033, (now - last) / 1000);
+  const dt = window.__game && window.__game.fixedSim ? 1 / 30 : Math.min(0.033, (now - last) / 1000);
   last = now;
   elapsed += dt;
   windUniform.value = elapsed;
@@ -471,7 +520,10 @@ function frame(now) {
       v.animate(dt);
     }
   }
+  stepGrains(dt);
+  renderGrains();
   updateParticles(dt);
+  perf(dt);
   updateDust(dt);
   relax(dt);
   flush();
@@ -517,7 +569,7 @@ function renderIcon(size, transparent) {
   const d = new THREE.DirectionalLight(0xffffff, 2.4);
   d.position.set(6, 9, 4);
   sc.add(d);
-  const v = new Vehicle('loader', sc);
+  const v = new Vehicle('loader', sc, false);
   v.x = 0; v.z = 0; v.y = 0; v.yaw = -0.75; v.lift = 0.35; v.curl = 0.3;
   v.sync();
   const cm = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
@@ -529,4 +581,4 @@ function renderIcon(size, transparent) {
   r.dispose();
   return url;
 }
-window.__game = { renderIcon, TER, get job() { return job; }, get active() { return active; }, get mode() { return mode; }, world, save, startJob, JOBS, finishJob, input };
+window.__game = { grains: () => grainCount(), renderIcon, TER, get job() { return job; }, get active() { return active; }, get mode() { return mode; }, world, save, startJob, JOBS, finishJob, input };

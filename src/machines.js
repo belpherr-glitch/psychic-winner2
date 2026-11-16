@@ -6,6 +6,7 @@ import {
   heightAt, toG, toW, deposit, dirty, wake, tread, grainTex,
 } from './terrain.js';
 import { spawn, puff } from './particles.js';
+import { GR, GV, addCollider, addContainer, containerLoad, containerMat, spawnGrain, grainsFree } from './grains.js';
 import { MAT, toon, rbox, part, cylGeo, axleGeo, fenderGeo, arcStrip, plateGeo, wheelGroup, Piston, anchor, bake, outline } from './gfx.js';
 
 /* ---------- especificações ---------- */
@@ -465,9 +466,10 @@ function buildTruck() {
 /* ---------- veículo ---------- */
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _o = new THREE.Vector3();
 const _inv = new THREE.Matrix4();
+const _ax = new THREE.Vector3();
 
 export class Vehicle {
-  constructor(id, scene) {
+  constructor(id, scene, physics = true) {
     this.id = id;
     this.s = MACHINES[id];
     this.kind = this.s.kind;
@@ -490,6 +492,59 @@ export class Vehicle {
     this.fx = 0; this.fz = 1;
     this.bedInv = new THREE.Matrix4();
     this.dustT = 0;
+    this.vy = 0; this.pv = 0; this.rv = 0; this.accel = 0; this.tipT = 0;
+    this.cutCarry = 0;
+    this.ci = -1;
+    if (physics) this.setupPhysics();
+  }
+
+  // peças físicas que interagem com os grãos
+  setupPhysics() {
+    const box = (parent, x, y, z, hx, hy, hz, ci = -1, rx = 0, mu = 0.7) => {
+      const a = new THREE.Object3D();
+      a.position.set(x, y, z);
+      a.rotation.x = rx;
+      parent.add(a);
+      return addCollider(a, hx, hy, hz, ci, mu);
+    };
+    const k = this.kind;
+    if (k === 'loader' || k === 'skid') {
+      const s = this.bs, W = this.BW, b = this.tool;
+      this.ci = addContainer(b, [-W / 2, -0.62 * s, -0.55 * s, W / 2, 0.62 * s, 1.12 * s], () => {
+        const e = b.matrixWorld.elements;
+        const l = Math.hypot(e[8], e[9], e[10]) || 1;
+        return e[9] / l < -0.28;
+      });
+      box(b, 0, -0.55 * s - 0.05, 0.42 * s, W / 2, 0.06, 0.64 * s, this.ci);
+      box(b, 0, -0.33 * s, -0.25 * s, W / 2, 0.06, 0.33 * s, this.ci, -2.356);
+      box(b, 0, 0.19 * s, -0.36 * s, W / 2, 0.06, 0.31 * s, this.ci, -1.16);
+      box(b, 0, 0.5 * s, -0.04 * s, W / 2, 0.05, 0.2 * s, this.ci);
+      for (const sx of [-1, 1]) box(b, sx * (W / 2 + 0.02), -0.05 * s, 0.3 * s, 0.05, 0.58 * s, 0.78 * s, this.ci);
+      for (const sx of [-1, 1]) box(this.arm, sx * (k === 'loader' ? 0.8 : 0.88), 0, 2.4 / 2, 0.14, 0.24, 1.2);
+      const wpar = this.articulated ? [this.front, this.front, this.rear, this.rear] : [this.root, this.root, this.root, this.root];
+      this.wheels.forEach((w, i) => box(wpar[i], w.position.x, w.position.y, w.position.z, this.wheelR * 0.42, this.wheelR * 0.8, this.wheelR * 0.8, -1, 0, 0.5));
+      if (k === 'loader') {
+        box(this.front, 0, 1.15, 1.05, 0.6, 0.45, 1.1);
+        box(this.rear, 0, 1.75, -2.4, 1.0, 0.9, 1.5);
+        box(this.rear, 0, 2.4, -0.6, 0.9, 1.0, 0.9);
+      } else box(this.root, 0, 1.3, -0.1, 0.78, 0.9, 1.05);
+    } else if (k === 'dozer') {
+      const b = this.tool;
+      box(b, 0, 0.66, -0.02, 1.85, 0.66, 0.1, -1, 0, 0.8);
+      for (const sx of [-1, 1]) box(b, sx * 1.85, 0.6, -0.12, 0.05, 0.6, 0.28);
+      for (const sx of [-1, 1]) box(this.root, sx * 1.22, 0.44, 0, 0.34, 0.45, 1.85, -1, 0, 0.6);
+      box(this.root, 0, 1.6, 0, 0.9, 0.7, 1.65);
+    } else if (k === 'truck') {
+      const b = this.bed;
+      this.ci = addContainer(b, [-1.25, -0.05, -0.1, 1.25, 2.6, 4.85], () => this.tilt > 0.2);
+      box(b, 0, 0.06, 2.4, 1.25, 0.08, 2.45, this.ci);
+      for (const sx of [-1, 1]) box(b, sx * 1.29, 0.75, 2.4, 0.06, 0.75, 2.45, this.ci);
+      box(b, 0, 0.75, 4.82, 1.3, 0.75, 0.08, this.ci);
+      box(b, 0, 1.5, 5.15, 1.35, 0.06, 0.3, this.ci);
+      this.wheels.forEach((w) => box(w.parent, w.position.x, w.position.y, w.position.z, 0.32, this.wheelR * 0.8, this.wheelR * 0.8, -1, 0, 0.5));
+      box(this.root, 0, 2.2, 2.9, 1.3, 1.1, 1.0);
+      box(this.root, 0, 1.0, -0.3, 0.55, 0.25, 3.5);
+    }
   }
 
   place(x, z, yaw) {
@@ -498,26 +553,42 @@ export class Vehicle {
     this.sync();
   }
 
-  // amostra o terreno nos pontos de apoio
+  // amostra o terreno nos pontos de apoio (cada metade da articulada separada)
   pose(dt, snap) {
     const c = this.s.contacts;
-    const s = Math.sin(this.yaw), co = Math.cos(this.yaw);
-    const at = (lx, lz) => heightAt(this.x + co * lx + s * lz, this.z - s * lx + co * lz);
+    const art = this.articulated ? this.steerA * 0.55 : 0;
+    const at = (lx, lz) => {
+      const yaw = this.yaw + (lz > 0 ? -art : art);
+      const s = Math.sin(yaw), co = Math.cos(yaw);
+      return heightAt(this.x + co * lx + s * lz, this.z - s * lx + co * lz);
+    };
     const fl = at(c.x, c.f), fr = at(-c.x, c.f), bl = at(c.x, c.b), br = at(-c.x, c.b);
     let hf = (fl + fr) / 2, hb = (bl + br) / 2, hl = (fl + bl) / 2, hr = (fr + br) / 2;
     if (this.s.tank) {
-      const ml = at(c.x, 0), mr = at(-c.x, 0);
+      const ml = at(c.x, 0.01), mr = at(-c.x, 0.01);
       hl = Math.max(hl, (ml + hl) / 2); hr = Math.max(hr, (mr + hr) / 2);
     }
     const yt = Math.max((hf + hb) / 2, (fl + fr + bl + br) / 4);
-    const pt = Math.atan2(hf - hb, c.f - c.b);
-    const rt = Math.atan2(hl - hr, 2 * c.x);
-    if (snap) { this.y = yt; this.pitch = pt; this.roll = rt; return; }
-    const k = Math.min(1, dt * 12), kr = Math.min(1, dt * 9);
-    if (yt < this.y) this.y = Math.max(yt, this.y - 9 * dt * dt - (this.y - yt) * k * 0.6);
-    else this.y = lerp(this.y, yt, k);
-    this.pitch = lerp(this.pitch, pt, kr);
-    this.roll = lerp(this.roll, rt, kr);
+    // transferência de peso: frenagem afunda a frente, carga pesa na frente
+    const frontLoad = this.kind === 'loader' || this.kind === 'skid' ? (this.load / (this.s.cap || 1)) * 0.025 : 0;
+    const pt = Math.atan2(hf - hb, c.f - c.b) - clamp(this.accel, -4, 4) * 0.012 - frontLoad;
+    const rt = Math.atan2(hl - hr, 2 * c.x) + clamp(this.yawRate * this.speed, -3, 3) * 0.012;
+    if (snap) { this.y = yt; this.pitch = pt; this.roll = rt; this.vy = this.pv = this.rv = 0; return; }
+    // suspensão: mola + amortecedor (pneu dá mais pulo que esteira)
+    const soft = this.s.tank ? 0.6 : 1;
+    const k = 140 / soft, d = 16;
+    if (yt > this.y) { this.vy += (k * (yt - this.y) - d * this.vy) * dt; }
+    else { this.vy -= 9.81 * dt; this.vy *= 1 - 2 * dt; }
+    this.y += this.vy * dt;
+    if (this.y < yt) { this.y = yt; if (this.vy < 0) this.vy *= -0.15 * soft; }
+    if (this.y > yt + 1.5) this.y = yt + 1.5;
+    const kp = 70 / soft, dp = 12;
+    this.pv += (kp * (pt - this.pitch) - dp * this.pv) * dt;
+    this.rv += (kp * (rt - this.roll) - dp * this.rv) * dt;
+    this.pitch += this.pv * dt;
+    this.roll += this.rv * dt;
+    // tombamento
+    if (Math.abs(this.roll) > 0.62 || Math.abs(this.pitch) > 0.75) this.tipT += dt; else this.tipT = 0;
   }
 
   circlesWorld(x, z, yaw, out) {
@@ -563,35 +634,54 @@ export class Vehicle {
   drive(dt, inp, world) {
     const s = this.s;
     const thr = inp.thr, st = inp.steer;
-    const loadF = s.cap ? 1 - 0.22 * (this.load / s.cap) * (this.kind === 'truck' ? 1 : 0.5) : 1;
-    const rf = Math.max(0.12, s.power / (s.power + this.resist));
-    const maxV = s.maxSpeed * loadF * rf;
-    const target = thr * (thr > 0 ? maxV : maxV * 0.65);
-    if (Math.abs(thr) < 0.05) this.speed = approach(this.speed, 0, s.brake * dt);
-    else {
+    // massa aumenta com a carga: acelera e freia mais devagar
+    const mass = 1 + (s.cap ? (this.load / s.cap) * (this.kind === 'truck' ? 0.9 : 0.45) : 0);
+    const rf = Math.max(0.1, s.power / (s.power + this.resist));
+    const maxV = s.maxSpeed * rf;
+    const target = thr * (thr > 0 ? maxV : maxV * 0.6);
+    const v0 = this.speed;
+    const hydrostatic = this.kind !== 'truck';
+    if (Math.abs(thr) < 0.05) {
+      // máquina hidrostática segura sozinha; caminhão vai no embalo
+      this.speed = approach(this.speed, 0, (hydrostatic ? s.brake * 0.8 : 1.4) * dt / mass);
+    } else {
       const braking = Math.sign(target) !== Math.sign(this.speed) && Math.abs(this.speed) > 0.15;
-      this.speed = approach(this.speed, target, (braking ? s.brake : s.accel) * dt);
+      const a = braking ? s.brake : s.accel * (0.35 + 0.65 * Math.min(1, Math.abs(thr) * 1.4));
+      this.speed = approach(this.speed, target, (a * dt) / mass);
     }
-    if (this.speed > maxV) this.speed = approach(this.speed, maxV, s.brake * 1.5 * dt);
-    this.speed -= Math.sin(this.pitch) * 3.2 * dt;
-    if (Math.abs(thr) < 0.05 && Math.abs(this.speed) < 0.35) this.speed = approach(this.speed, 0, 2 * dt);
+    if (this.speed > maxV) this.speed = approach(this.speed, maxV, s.brake * 1.2 * dt);
+    // rampa: gravidade (motor hidrostático segura parte)
+    this.speed -= Math.sin(this.pitch) * 9.81 * dt * (Math.abs(thr) < 0.05 && hydrostatic ? 0.15 : 0.55);
+    this.accel = lerp(this.accel, (this.speed - v0) / Math.max(dt, 1e-3), Math.min(1, dt * 10));
 
     let yawRate;
     if (s.tank) {
-      yawRate = -st * s.turnRate * (1 - 0.35 * Math.abs(this.speed) / s.maxSpeed) * rf;
-      if (Math.abs(st) > 0.3 && Math.abs(thr) < 0.05) this.speed = approach(this.speed, 0, s.brake * dt);
+      // esteira/skid: cada lado com sua velocidade; girar parado é possível
+      const turn = -st * s.turnRate * rf;
+      yawRate = turn * (1 - 0.3 * Math.min(1, Math.abs(this.speed) / s.maxSpeed));
+      if (Math.abs(thr) < 0.05 && Math.abs(st) > 0.2) this.speed = approach(this.speed, 0, s.brake * dt);
+      this.steerA = 0;
+    } else if (this.articulated) {
+      // articulação hidráulica: dobra até parada; o giro sai do ângulo da junta
+      const prev = this.steerA;
+      this.steerA = approach(this.steerA, st * s.maxSteer, 0.75 * dt);
+      this.artRate = (this.steerA - prev) / Math.max(dt, 1e-3);
+      yawRate = (-2 * this.speed * Math.tan(this.steerA * 0.55)) / s.wb;
     } else {
-      this.steerA = approach(this.steerA, st * s.maxSteer, 1.5 * dt);
+      this.steerA = approach(this.steerA, st * s.maxSteer, 1.2 * dt);
       yawRate = (-this.speed * Math.tan(this.steerA)) / s.wb;
     }
-    this.yawRate = yawRate;
-    const nyaw = this.yaw + yawRate * dt;
+    // patinagem em terra solta / muita resistência
+    const slip = clamp(this.resist / (s.power * 3), 0, 0.5);
+    this.yawRate = yawRate * (1 - slip * 0.5);
+    const nyaw = this.yaw + this.yawRate * dt;
     const nx = this.x + Math.sin(nyaw) * this.speed * dt;
     const nz = this.z + Math.cos(nyaw) * this.speed * dt;
     if (this.blocked(nx, nz, nyaw, world)) {
       if (!this.blocked(this.x, this.z, nyaw, world)) this.yaw = nyaw;
-      this.speed *= -0.15;
+      this.speed *= -0.12;
       this.bump = 0.25;
+      this.pv -= 0.6 * Math.sign(this.speed || 1);
     } else {
       this.x = nx; this.z = nz; this.yaw = nyaw;
     }
@@ -630,14 +720,19 @@ export class Vehicle {
   hydraulics(dt, inp) {
     const tx = inp.tx, ty = inp.ty;
     this.hydro = lerp(this.hydro, Math.min(1, Math.abs(tx) + Math.abs(ty)), Math.min(1, dt * 6));
+    // válvulas proporcionais com rampa (sem tranco)
+    this.hy = lerp(this.hy || 0, ty, Math.min(1, dt * 7));
+    this.hx = lerp(this.hx || 0, tx, Math.min(1, dt * 7));
+    const ry = this.hy * Math.abs(this.hy) ** 0.4, rx = this.hx * Math.abs(this.hx) ** 0.4;
     if (this.kind === 'loader' || this.kind === 'skid') {
-      this.lift = clamp(this.lift + ty * 0.5 * dt, this.liftMin, this.liftMax);
-      this.curl = clamp(this.curl - tx * 1.1 * dt, -1.05, 0.75);
+      const loadSlow = 1 - 0.25 * (this.load / (this.s.cap || 1));
+      this.lift = clamp(this.lift + ry * 0.42 * loadSlow * dt, this.liftMin, this.liftMax);
+      this.curl = clamp(this.curl - rx * 0.95 * dt, -1.05, 0.75);
     } else if (this.kind === 'dozer') {
-      this.lift = clamp(this.lift + ty * 0.35 * dt, -0.2, 0.45);
-      this.bladePitch = clamp(this.bladePitch + tx * 0.5 * dt, -0.3, 0.3);
+      this.lift = clamp(this.lift + ry * 0.32 * dt, -0.2, 0.45);
+      this.bladePitch = clamp(this.bladePitch + rx * 0.45 * dt, -0.3, 0.3);
     } else if (this.kind === 'truck') {
-      this.tilt = clamp(this.tilt + ty * 0.45 * dt, 0, 0.95);
+      this.tilt = clamp(this.tilt + ry * 0.35 * dt, 0, 0.95);
     }
   }
 
@@ -683,7 +778,8 @@ export class Vehicle {
 
   updateHeap() {
     const m = this.heap;
-    if (!m) return;
+    if (m) m.visible = false;
+    return;
     const f = this.s.cap ? this.load / this.s.cap : 0;
     m.visible = f > 0.01;
     if (!m.visible) return;
@@ -692,163 +788,93 @@ export class Vehicle {
     m.material.color.copy(MATS[this.mat].c);
   }
 
-  // interação da caçamba/lâmina com o solo
+  // ferramenta corta o chão: o que estiver acima do fundo da caçamba/lâmina
+  // vira grãos soltos de verdade, que a peça empurra e recolhe fisicamente
   applyTool(dt, world) {
-    if (this.kind === 'truck') return this.truckDump(dt);
     this.root.updateMatrixWorld(true);
+    if (this.ci >= 0) {
+      this.load = containerLoad(this.ci);
+      this._matT = (this._matT || 0) - dt;
+      if (this._matT <= 0 && this.load > 0) { this._matT = 0.5; this.mat = containerMat(this.ci); }
+    }
+    if (this.kind === 'truck') { this.resist = 0; return; }
     const T = this.tool_, obj = this.tool;
     const Ec = obj.localToWorld(_v.copy(T.edge));
     const Hc = obj.localToWorld(_v2.copy(T.heel));
     const origin = obj.getWorldPosition(_o);
-    // eixo lateral da ferramenta
-    const ax = obj.localToWorld(new THREE.Vector3(1, 0, 0)).sub(origin);
+    const ax = obj.localToWorld(_ax.set(1, 0, 0)).sub(origin);
     const axl = Math.hypot(ax.x, ax.z) || 1;
     const wx = ax.x / axl, wz = ax.z / axl;
     let fx = Ec.x - Hc.x, fz = Ec.z - Hc.z;
     let len = Math.hypot(fx, fz);
     if (len < 0.25) { fx = this.fx; fz = this.fz; len = 0.25; } else { fx /= len; fz /= len; }
-    const side = ax.y / axl; // inclinação lateral
+    const side = ax.y / axl;
     const W = T.W, hw = W / 2;
-    const ex = Ec.x, ez = Ec.z;
-    const minX = Math.min(Hc.x, Ec.x) - hw - 0.6, maxX = Math.max(Hc.x, Ec.x) + hw + 0.6;
-    const minZ = Math.min(Hc.z, Ec.z) - hw - 0.6, maxZ = Math.max(Hc.z, Ec.z) + hw + 0.6;
-    // a ferramenta está perto do chão?
-    if (Math.min(Ec.y, Hc.y) > heightAt(ex, ez) + 1.2 && Math.min(Ec.y, Hc.y) > heightAt(Hc.x, Hc.z) + 1.2) {
+    const lowY = Math.min(Ec.y, Hc.y);
+    if (lowY > heightAt(Ec.x, Ec.z) + 0.6 && lowY > heightAt(Hc.x, Hc.z) + 0.6) {
       this.resist = lerp(this.resist, 0, Math.min(1, dt * 5));
       this.digRate = lerp(this.digRate, 0, Math.min(1, dt * 5));
-      this.bucketDump(dt, Ec, origin);
       return;
     }
+    const minX = Math.min(Hc.x, Ec.x) - hw - 0.6, maxX = Math.max(Hc.x, Ec.x) + hw + 0.6;
+    const minZ = Math.min(Hc.z, Ec.z) - hw - 0.6, maxZ = Math.max(Hc.z, Ec.z) + hw + 0.6;
     const gx0 = Math.max(1, Math.floor(toG(minX))), gx1 = Math.min(G - 2, Math.ceil(toG(maxX)));
     const gz0 = Math.max(1, Math.floor(toG(minZ))), gz1 = Math.min(G - 2, Math.ceil(toG(maxZ)));
-    const ncol = Math.ceil(W / CELL) + 1;
-    const cols = this._cols || (this._cols = new Float32Array(16));
-    cols.fill(0);
-    const matv = [0, 0, 0, 0];
-    let total = 0, hard = 0;
+    // orçamento de grãos por quadro (desempenho)
+    let budget = Math.min(grainsFree(), this.kind === 'dozer' ? 46 : 34) * GV;
+    let cutTotal = 0, blocked = 0, hard = 0;
+    const blade = this.kind === 'dozer';
     for (let z = gz0; z <= gz1; z++) for (let x = gx0; x <= gx1; x++) {
       const px = toW(x), pz = toW(z);
       const dx = px - Hc.x, dz = pz - Hc.z;
       const u = dx * wx + dz * wz, v = dx * fx + dz * fz;
-      if (u < -hw || u > hw || v < -0.1 || v > len + 0.12) continue;
+      if (u < -hw || u > hw || v < -0.12 || v > len + 0.15) continue;
       const by = lerp(Hc.y, Ec.y, clamp(v / len, 0, 1)) + u * side;
       const i = z * G + x;
-      const ex_ = H[i] - by;
-      if (ex_ <= 0.004) continue;
-      const amt = Math.min(ex_, H[i] - ROCK[i]);
+      const ex = H[i] - by;
+      if (ex <= 0.02) continue;
+      let amt = Math.min(ex, H[i] - ROCK[i]);
       if (amt <= 0) continue;
       const wasLoose = LOOSE[i] > 0.02;
-      H[i] -= amt;
-      LOOSE[i] = Math.max(0, LOOSE[i] - amt);
+      // material duro corta mais devagar
+      const soft = wasLoose ? 1.6 : MATS[MATID[i]].soft;
+      const speedCut = (0.35 + Math.abs(this.speed) * 0.9 + this.hydro * 0.8) * soft * dt * 2.2;
+      const want = Math.min(amt, speedCut + 0.01);
+      const vol = Math.min(want * CA, budget);
+      blocked += (amt - vol / CA) * (wasLoose ? 0.4 : 1.4 / soft);
+      if (vol <= 0) continue;
+      budget -= vol;
+      const dh = vol / CA;
+      const top = H[i];
+      H[i] -= dh;
+      LOOSE[i] = Math.max(0, LOOSE[i] - dh);
       GRASS[i] = 0;
-      matv[MATID[i]] += amt;
-      hard += amt * (wasLoose ? 0.55 : 2.2 / MATS[MATID[i]].soft);
-      total += amt;
-      const ci = clamp(Math.floor(((u + hw) / W) * (ncol - 1) + 0.5), 0, 15);
-      cols[ci] += amt;
+      cutTotal += vol;
+      hard += vol * (wasLoose ? 0.4 : 1.6 / soft);
+      // grãos nascem no volume cortado, já em contato com a peça
+      this.cutCarry += vol;
+      const m = MATID[i];
+      while (this.cutCarry >= GV) {
+        this.cutCarry -= GV;
+        const t = Math.random();
+        const yy = Math.max(by + GR * 1.1, lerp(H[i], top, t) + GR * 0.5);
+        const ahead = blade ? 0.35 + Math.random() * 0.25 : 0;
+        spawnGrain(px + (Math.random() - 0.5) * CELL + fx * ahead, yy, pz + (Math.random() - 0.5) * CELL + fz * ahead,
+          this.fx * this.speed * 0.6, 0.4 + Math.random() * 0.6, this.fz * this.speed * 0.6, m, dt);
+      }
     }
-    let V = total * CA;
-    let dom = 0;
-    for (let q = 1; q < 4; q++) if (matv[q] > matv[dom]) dom = q;
-    if (V > 0) {
+    if (cutTotal > 0) {
       dirty(gx0, gz0, gx1, gz1);
       wake(gx0, gz0); wake(gx1, gz1); wake(gx0, gz1); wake(gx1, gz0);
-    }
-    // caçamba engole o material se estiver na posição de corte
-    let taken = 0;
-    if (this.s.cap && this.curl > -0.5 && V > 0) {
-      const space = this.s.cap - this.load;
-      taken = Math.min(V, Math.max(0, space));
-      if (taken > 0) {
-        if (this.load < 0.05 || taken > this.load * 0.3) this.mat = dom;
-        this.load += taken;
+      if (Math.random() < 0.25) {
+        const i = Math.round(toG(Ec.z)) * G + Math.round(toG(Ec.x));
+        if (MATS[MATID[i] || 0].dust > 0.5) puff(Ec.x, Ec.y + 0.6, Ec.z, this.fx, this.fz, 0.7);
       }
     }
-    const R = V - taken;
-    if (R > 1e-5 && total > 0) {
-      const back = this.speed < -0.15;
-      const ahead = back ? -0.45 : 0.5;
-      const bx = back ? Hc.x : ex, bz = back ? Hc.z : ez;
-      for (let ci = 0; ci < ncol; ci++) {
-        if (cols[ci] <= 0) continue;
-        const share = (R * cols[ci]) / total;
-        const u = (ci / (ncol - 1)) * W - hw;
-        deposit(bx + wx * u + fx * ahead, bz + wz * u + fz * ahead, share, dom);
-      }
-    }
-    // torrões voando (cosméticos)
-    const rate = V / Math.max(dt, 1e-3);
-    if (V > 0.0015) {
-      const nfx = Math.min(4, Math.ceil(V * 50));
-      for (let q = 0; q < nfx; q++) {
-        const u = (Math.random() - 0.5) * W * 0.9;
-        spawn(ex + wx * u, Ec.y + 0.35 + Math.random() * 0.3, ez + wz * u,
-          this.fx * this.speed * 0.9 + (Math.random() - 0.5) * 1.2, 1 + Math.random() * 2.2, this.fz * this.speed * 0.9 + (Math.random() - 0.5) * 1.2,
-          0, dom, 0.06 + Math.random() * 0.1);
-      }
-      if (MATS[dom].dust > 0.5 && Math.random() < 0.3) puff(ex, Ec.y + 0.6, ez, this.fx, this.fz, 0.7);
-    }
-    this.resist = lerp(this.resist, (hard * CA) / Math.max(dt, 1e-3), Math.min(1, dt * 8));
-    this.digRate = lerp(this.digRate, rate, Math.min(1, dt * 8));
-    this.bucketDump(dt, Ec, origin);
-  }
-
-  bucketDump(dt, Ec, origin) {
-    if (!this.s.cap || this.load <= 0) return;
-    const fd = this.tool.localToWorld(_v2.set(0, 0, 1)).sub(origin);
-    const sy = fd.y;
-    if (sy > -0.32) return;
-    const rate = this.s.cap * 1.5 * clamp((-sy - 0.32) / 0.45, 0.15, 1);
-    const out = Math.min(this.load, rate * dt);
-    this.load -= out;
-    if (this.load < 0.004) this.load = 0;
-    const np = Math.max(1, Math.round(out / 0.016));
-    const pv = out / np;
-    const T = this.tool_;
-    for (let q = 0; q < np; q++) {
-      const u = (Math.random() - 0.5) * T.W * 0.85;
-      const p = this.tool.localToWorld(_v.set(u, T.edge.y + 0.15, T.edge.z - 0.1));
-      spawn(p.x, p.y, p.z,
-        fd.x * 1.4 + this.fx * this.speed + (Math.random() - 0.5) * 0.5,
-        fd.y * 1.2 - Math.random() * 0.5,
-        fd.z * 1.4 + this.fz * this.speed + (Math.random() - 0.5) * 0.5,
-        pv, this.mat);
-    }
-  }
-
-  truckDump(dt) {
-    this.root.updateMatrixWorld(true);
-    this.bedInv.copy(this.bed.matrixWorld).invert();
-    this.resist = 0;
-    if (this.tilt < 0.3 || this.load <= 0) return;
-    const rate = 5 * clamp((this.tilt - 0.3) / 0.5, 0.1, 1);
-    const out = Math.min(this.load, rate * dt);
-    this.load -= out;
-    if (this.load < 0.004) this.load = 0;
-    const np = Math.max(1, Math.round(out / 0.022));
-    const pv = out / np;
-    const o = this.bed.getWorldPosition(_o);
-    const back = this.bed.localToWorld(_v2.set(0, 0, -1)).sub(o);
-    for (let q = 0; q < np; q++) {
-      const p = this.bed.localToWorld(_v.set((Math.random() - 0.5) * 2.1, 0.3 + Math.random() * 0.3, 0.05));
-      spawn(p.x, p.y, p.z,
-        back.x * 1.6 + this.fx * this.speed + (Math.random() - 0.5) * 0.4,
-        back.y * 1.2 - 0.3,
-        back.z * 1.6 + this.fz * this.speed + (Math.random() - 0.5) * 0.4, pv, this.mat);
-    }
-  }
-
-  // partícula caindo dentro da báscula?
-  catchParticle(x, y, z, v, m) {
-    if (this.kind !== 'truck' || this.tilt > 0.22) return false;
-    if (this.load >= this.s.cap) return false;
-    _v.set(x, y, z).applyMatrix4(this.bedInv);
-    if (_v.x < -1.2 || _v.x > 1.2 || _v.z < 0.1 || _v.z > this.BL - 0.1) return false;
-    const top = 0.12 + 1.3 * Math.sqrt(this.load / this.s.cap);
-    if (_v.y > top + 0.15 || _v.y < -0.4) return false;
-    if (this.load < 0.1 || v > this.load * 0.2) this.mat = m;
-    this.load = Math.min(this.s.cap, this.load + v);
-    return true;
+    // resistência: material cortado + material que a peça não conseguiu cortar ainda
+    const r = (hard + blocked * CA * 6) / Math.max(dt, 1e-3);
+    this.resist = lerp(this.resist, r, Math.min(1, dt * 8));
+    this.digRate = lerp(this.digRate, cutTotal / Math.max(dt, 1e-3), Math.min(1, dt * 8));
   }
 
   get cabHide() { return this.cabin.hide; }
