@@ -7,6 +7,7 @@ import {
 } from './terrain.js';
 import { spawn, puff } from './particles.js';
 import { GR, GV, addCollider, addContainer, containerLoad, containerMat, spawnGrain, grainsFree } from './grains.js';
+import { waterDepth, stirMud } from './water.js';
 import { MAT, toon, rbox, part, cylGeo, axleGeo, fenderGeo, arcStrip, plateGeo, wheelGroup, Piston, anchor, bake, outline } from './gfx.js';
 
 /* ---------- especificações ---------- */
@@ -627,7 +628,7 @@ export class Vehicle {
       const h1 = heightAt(wx + s * dir * 0.45, wz + co * dir * 0.45);
       if (h1 - h0 > 0.55) return true;
     }
-    if (heightAt(nx, nz) < WATER_Y - 0.75) return true;
+    if (waterDepth(nx, nz) > (this.kind === 'truck' ? 1.3 : 1.5)) return true;
     return false;
   }
 
@@ -637,7 +638,10 @@ export class Vehicle {
     // massa aumenta com a carga: acelera e freia mais devagar
     const mass = 1 + (s.cap ? (this.load / s.cap) * (this.kind === 'truck' ? 0.9 : 0.45) : 0);
     const rf = Math.max(0.1, s.power / (s.power + this.resist));
-    const maxV = s.maxSpeed * rf;
+    // dentro d'água: arrasto e lama
+    const wd = waterDepth(this.x, this.z);
+    this.wet = wd;
+    const maxV = s.maxSpeed * rf * (wd > 0.1 ? Math.max(0.35, 1 - wd * 0.55) : 1);
     const target = thr * (thr > 0 ? maxV : maxV * 0.6);
     const v0 = this.speed;
     const hydrostatic = this.kind !== 'truck';
@@ -704,6 +708,15 @@ export class Vehicle {
       const wx = this.x + co * lx + s * lz, wz = this.z - s * lx + co * lz;
       tread(wx, wz, amt, sink);
       tread(wx + co * 0.25, wz - s * 0.25, amt * 0.6, sink * 0.5);
+    }
+    if (this.wet > 0.08 && sp > 0.5) {
+      // espirra água e levanta barro
+      stirMud(this.x, this.z, 0.04 * dt * sp);
+      if (Math.random() < dt * sp * 4) {
+        const lz = (Math.random() > 0.5 ? c.f : c.b), lx = (Math.random() > 0.5 ? 1 : -1) * c.x;
+        const wx = this.x + co * lx + s * lz, wz = this.z - s * lx + co * lz;
+        puff(wx, heightAt(wx, wz) + this.wet + 0.1, wz, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, 0.45, 0xeaf8ff);
+      }
     }
     this.dustT -= dt;
     if (Math.abs(this.speed) > 2.2 && this.dustT <= 0) {

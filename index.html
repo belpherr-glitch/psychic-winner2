@@ -62,6 +62,7 @@
         <span class="lab r" id="labR">Despejar</span>
       </div>
       <div id="toast" hidden></div>
+      <div id="mpBadge" hidden></div>
     </div>
 
     <!-- Tela inicial -->
@@ -72,6 +73,7 @@
         <p class="sub">Terraplanagem · Escavação · Transporte</p>
         <div class="tbtn-row">
           <button class="big" id="tPlay">Ver contratos</button>
+          <button class="ghost" id="tMp">Jogar com amigo</button>
           <button class="ghost" id="tShop">Garagem</button>
         </div>
         <p class="hint">Gire o celular na horizontal. Joystick esquerdo dirige; o direito opera braço, caçamba, lâmina e báscula.</p>
@@ -87,6 +89,7 @@
         </div>
         <div class="ph-right">
           <span class="cash-pill" id="jobsMoney">R$ 0</span>
+          <button class="ghost sm danger" id="mpClose" hidden>Fechar sala</button>
           <button class="ghost sm" id="jShop">Garagem</button>
           <button class="ghost sm" id="jBack">Início</button>
         </div>
@@ -109,6 +112,35 @@
       <div class="cards" id="shopList"></div>
     </section>
 
+    <!-- Multiplayer -->
+    <section class="screen panel" id="sMp" hidden>
+      <header class="ph">
+        <div>
+          <span class="eyebrow">Wi‑Fi local</span>
+          <h2>Jogar com amigo</h2>
+        </div>
+        <div class="ph-right"><button class="ghost sm" id="mpBack">Voltar</button></div>
+      </header>
+      <div class="mp-grid">
+        <div class="card">
+          <h3>Seu nome</h3>
+          <input id="mpName" class="field" maxlength="18" placeholder="Ex.: Zé da Pá" autocomplete="off" />
+          <h3>Criar sala</h3>
+          <p class="desc">Você escolhe o serviço e seu amigo entra com outra máquina no mesmo canteiro.</p>
+          <button class="big" id="mpHost">Criar sala</button>
+        </div>
+        <div class="card">
+          <div class="row"><h3>Salas na rede</h3><button class="ghost sm" id="mpScan">Procurar</button></div>
+          <div id="mpRooms" class="rooms"></div>
+          <div class="row ip-row">
+            <input id="mpIp" class="field" inputmode="decimal" placeholder="IP da sala (ex.: 192.168.0.12)" autocomplete="off" />
+            <button class="ghost sm" id="mpJoinIp">Entrar</button>
+          </div>
+        </div>
+      </div>
+      <p class="mp-msg" id="mpMsg"></p>
+    </section>
+
     <!-- Pausa -->
     <section class="screen modal" id="sPause" hidden>
       <div class="sheet">
@@ -116,7 +148,13 @@
         <button class="big" id="pResume">Continuar</button>
         <button class="ghost" id="pReset">Reposicionar máquina</button>
         <button class="ghost" id="pSound">Som: ligado</button>
-        <button class="ghost" id="pQuality">Gráficos: alto</button>
+        <div class="qrow" id="qRow">
+          <span class="lbl">Gráficos</span>
+          <div class="seg" id="qSeg">
+            <button data-q="low">Leve</button><button data-q="auto">Auto</button><button data-q="high">Alto</button><button data-q="ultra">Ultra</button>
+          </div>
+        </div>
+        <button class="ghost" id="pQuality" hidden>Gráficos</button>
         <button class="ghost danger" id="pQuit">Sair do serviço</button>
       </div>
     </section>

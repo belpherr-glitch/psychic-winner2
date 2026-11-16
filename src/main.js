@@ -17,6 +17,10 @@ import { Input } from './input.js';
 import { Sound } from './audio.js';
 import { setOwnerEnabled, grainMesh, stepGrains, renderGrains, clearGrains, setBakeHook, setGrainCap, grainCap, grainCount } from './grains.js';
 import * as TER from './terrain.js';
+import { HostLink, ClientLink, discoverRooms, isNative } from './net.js';
+import { packGrains, unpackGrains } from './grains.js';
+import { waterMesh, resetWater, stepWater, renderWater } from './water.js';
+import { b64, unb64 } from './util.js';
 
 const $ = (s) => document.querySelector(s);
 
@@ -45,7 +49,7 @@ const water = makeWater(scene);
 makeOuter(scene);
 addTreeMeshes(scene);
 const clouds = makeClouds(scene);
-scene.add(terrainMesh, tuftMesh, particleMesh, dustMesh, grainMesh);
+scene.add(terrainMesh, tuftMesh, particleMesh, dustMesh, grainMesh, waterMesh);
 
 /* ---------- desempenho adaptativo (resolução, sombras, grãos) ---------- */
 const PR = [0.55, 0.65, 0.75, 0.85, 1.0, 1.25, 1.5];
@@ -73,17 +77,25 @@ function perf(dt) {
 function applyQuality() {
   const q = save.quality;
   const mobile = matchMedia('(pointer: coarse)').matches;
-  if (q === 'high') { prLevel = 6; lights.sun.castShadow = true; setGrainCap(3000); }
-  else if (q === 'low') { prLevel = 1; lights.sun.castShadow = false; setGrainCap(1400); }
-  else { prLevel = mobile ? 3 : 4; lights.sun.castShadow = true; setGrainCap(mobile ? 1800 : 2600); }
-  renderer.setPixelRatio(Math.min(PR[prLevel], Math.max(1, devicePixelRatio || 1)));
-  renderer.shadowMap.type = q === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
-  const sm = q === 'high' ? 2048 : 1024;
-  lights.sun.shadow.mapSize.set(sm, sm);
+  const dpr = devicePixelRatio || 1;
+  // Leve: A06 com folga · Auto: ajusta sozinho pelo FPS · Alto e Ultra: aparelhos fortes
+  const P = {
+    low: { pr: 0.7, shadow: 0, sm: 1024, grains: 1200, grass: false, soft: false },
+    auto: { pr: mobile ? 0.85 : 1, shadow: 1, sm: 1024, grains: mobile ? 1800 : 2600, grass: true, soft: false },
+    high: { pr: Math.min(dpr, 1.5), shadow: 1, sm: 2048, grains: 2800, grass: true, soft: true },
+    ultra: { pr: Math.min(dpr, 2.5), shadow: 1, sm: 4096, grains: 3200, grass: true, soft: true },
+  }[q] || null;
+  const cfg = P || { pr: 1, shadow: 1, sm: 1024, grains: 2000, grass: true, soft: false };
+  prLevel = PR.reduce((best, x, i) => (Math.abs(x - cfg.pr) < Math.abs(PR[best] - cfg.pr) ? i : best), 0);
+  renderer.setPixelRatio(cfg.pr);
+  lights.sun.castShadow = !!cfg.shadow;
+  renderer.shadowMap.type = cfg.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+  lights.sun.shadow.mapSize.set(cfg.sm, cfg.sm);
   if (lights.sun.shadow.map) { lights.sun.shadow.map.dispose(); lights.sun.shadow.map = null; }
-  tuftMesh.visible = q !== 'low';
+  setGrainCap(cfg.grains);
+  tuftMesh.visible = cfg.grass;
   renderer.shadowMap.needsUpdate = true;
-  $('#pQuality').textContent = 'Gráficos: ' + ({ auto: 'automático', high: 'alto', low: 'leve' }[q] || 'automático');
+  for (const b of document.querySelectorAll('#qSeg button')) b.classList.toggle('on', b.dataset.q === q);
   resize();
 }
 function resize() {
@@ -123,7 +135,10 @@ function getVehicle(id) {
 }
 
 /* ================= canteiro ================= */
-function buildSite(def, seed) {
+let siteSeed = 0;
+function buildSite(def, seed, ownedOverride) {
+  siteSeed = seed;
+  const owned = ownedOverride || save.owned;
   if (job) { job.dispose(); job = null; }
   clearParticles();
   clearGrains();
@@ -140,12 +155,13 @@ function buildSite(def, seed) {
   placeTufts(seed);
   dirtyAll();
   flush();
+  resetWater();
   job = new Job(def, spec, ctx, scene);
   job.evaluate();
   // frota disponível no pátio
   for (const v of Object.values(fleet)) { v.root.visible = false; setOwnerEnabled(v.root, false); }
   world.vehicles = [];
-  const order = ['loader', 'truck', 'dozer', 'skid'].filter((id) => save.owned.includes(id));
+  const order = ['loader', 'truck', 'dozer', 'skid'].filter((id) => owned.includes(id));
   order.forEach((id, k) => {
     const v = getVehicle(id);
     v.root.visible = true;
@@ -157,7 +173,7 @@ function buildSite(def, seed) {
     v.place(sx, sz, 0);
     world.vehicles.push(v);
   });
-  const want = def.req.find((r) => save.owned.includes(r)) || order[0];
+  const want = def.req.find((r) => owned.includes(r)) || order[0];
   setActive(fleet[want]);
   jobTime = 0;
 }
@@ -284,7 +300,7 @@ function updateHud(dt) {
     bar.style.width = Math.round(job.progress * 100) + '%';
     bar.classList.toggle('ok', job.done);
     $('#jobGoal').style.left = job.type === 'free' ? '-10px' : `calc(${job.goal * 100}% - 1px)`;
-    $('#bFinish').hidden = !job.done;
+    $('#bFinish').hidden = !job.done || (net && net.role === 'client');
   }
 }
 function setupJobHud() {
@@ -303,7 +319,8 @@ function setupJobHud() {
 
 /* ================= telas ================= */
 function show(id) {
-  for (const s of ['#sTitle', '#sJobs', '#sShop', '#sPause', '#sDone']) $(s).hidden = s !== id;
+  for (const s of ['#sTitle', '#sJobs', '#sShop', '#sPause', '#sDone', '#sMp']) $(s).hidden = s !== id;
+  $('#mpClose').hidden = !(net && net.role === 'host' && id === '#sJobs');
   $('#hud').hidden = !(mode === 'play' || mode === 'pause');
   checkRotate();
 }
@@ -410,6 +427,7 @@ function startJob(def) {
   sound.start();
   mode = 'play';
   buildSite(def, (Date.now() % 100000) + Math.floor(Math.random() * 1000));
+  if (net && net.role === 'host') for (const id of net.peers.keys()) welcomePeer(id);
   setupJobHud();
   show(null);
   input.reset();
@@ -435,21 +453,270 @@ function finishJob() {
   const mins = Math.floor(jobTime / 60), secs = Math.floor(jobTime % 60);
   $('#dTime').textContent = `${mins} min ${String(secs).padStart(2, '0')} s`;
   $('#dTotal').textContent = money(def.pay + bonus);
+  if (net && net.role === 'host') net.link.send(JSON.stringify({ t: 'done', id: def.id, pay: def.pay, bonus, time: jobTime }));
   mode = 'done';
   show('#sDone');
 }
 
+
+/* ================= multiplayer Wi‑Fi ================= */
+// anfitrião simula tudo; convidado manda controles e recebe o mundo.
+let net = null;
+const SNAP_DT = 1 / 15;
+
+function vehState(v) {
+  const r = (x, k = 100) => Math.round(x * k) / k;
+  return [v.id, r(v.x), r(v.y), r(v.z), r(v.yaw, 1000), r(v.pitch, 1000), r(v.roll, 1000), r(v.speed), r(v.steerA, 1000),
+    r(v.lift, 1000), r(v.curl, 1000), r(v.bladePitch, 1000), r(v.tilt, 1000), r(v.load), v.mat, r(v.rpm), r(v.yawRate, 1000), r(v.hydro), r(v.digRate)];
+}
+
+async function hostRoom() {
+  try {
+    const link = new HostLink();
+    net = { role: 'host', link, peers: new Map(), driving: new Map(), t: 0 };
+    link.onJoin = (id) => { net.peers.set(id, { veh: null, inp: { ...NONE }, name: 'Amigo' }); };
+    link.onLeave = (id) => {
+      const p = net.peers.get(id);
+      if (p && p.veh) net.driving.delete(p.veh);
+      net.peers.delete(id);
+      toast(`${p ? p.name : 'Amigo'} saiu da sala`, 2.5);
+      updateMpStatus();
+    };
+    link.onMsg = (id, data) => hostMsg(id, data);
+    const ip = await link.start(save.name || 'Terra Pesada');
+    net.ip = ip;
+    updateMpStatus();
+    openJobs();
+  } catch (e) {
+    net = null;
+    $('#mpMsg').textContent = e.message || 'Não foi possível criar a sala.';
+  }
+}
+
+function freeVehicle() {
+  const taken = new Set([active, ...[...net.peers.values()].map((p) => p.veh)]);
+  return world.vehicles.find((v) => !taken.has(v)) || null;
+}
+
+function welcomePeer(id) {
+  const p = net.peers.get(id);
+  if (!p || mode !== 'play' && mode !== 'pause' && mode !== 'done') {
+    net.link.send(JSON.stringify({ t: 'wait' }), id);
+    return;
+  }
+  if (p.veh) net.driving.delete(p.veh);
+  p.veh = freeVehicle();
+  if (p.veh) net.driving.set(p.veh, p.inp);
+  const full = TER.packRect(0, 0, TER.G - 1, TER.G - 1);
+  net.link.send(JSON.stringify({
+    t: 'welcome', job: job.def.id, seed: siteSeed, owned: world.vehicles.map((v) => v.id),
+    you: p.veh ? p.veh.id : null, terrain: full, host: save.name || 'Anfitrião',
+  }), id);
+  toast(`${p.name} entrou${p.veh ? ' com ' + p.veh.s.short : ''}`, 2.5);
+  updateMpStatus();
+}
+
+function hostMsg(id, data) {
+  let m;
+  try { m = JSON.parse(data); } catch (_) { return; }
+  const p = net.peers.get(id);
+  if (!p) return;
+  if (m.t === 'hello') { p.name = m.name || 'Amigo'; welcomePeer(id); }
+  else if (m.t === 'in') { const a = m.a; p.inp.thr = a[0]; p.inp.steer = a[1]; p.inp.ty = a[2]; p.inp.tx = a[3]; }
+  else if (m.t === 'switch') {
+    const taken = new Set([active, ...[...net.peers.values()].map((q) => q.veh)]);
+    const list = world.vehicles.filter((v) => v === p.veh || !taken.has(v));
+    if (list.length < 2) return;
+    const nv = list[(list.indexOf(p.veh) + 1) % list.length];
+    if (p.veh) { net.driving.delete(p.veh); p.veh.speed = 0; }
+    p.veh = nv;
+    p.inp.thr = p.inp.steer = p.inp.tx = p.inp.ty = 0;
+    net.driving.set(nv, p.inp);
+    net.link.send(JSON.stringify({ t: 'assign', you: nv.id }), id);
+  }
+}
+
+let snapGrainBuf = null;
+function hostTick(dt) {
+  net.t -= dt;
+  if (net.t > 0 || !net.peers.size || !job || mode === 'jobs' || mode === 'title' || mode === 'shop') {
+    if (net.t <= 0) net.t = SNAP_DT;
+    return;
+  }
+  net.t = SNAP_DT;
+  const msg = { t: 's', v: world.vehicles.map(vehState), del: job.delivered || 0 };
+  const g = packGrains(snapGrainBuf);
+  snapGrainBuf = g;
+  msg.g = b64(new Uint8Array(g.buffer, g.byteOffset, g.byteLength));
+  const r = TER.takeNetRect();
+  if (r) msg.d = TER.packRect(...r);
+  msg.drv = [...net.peers.values()].filter((p) => p.veh).map((p) => [p.veh.id, p.name]);
+  msg.hv = active ? active.id : null;
+  net.link.send(JSON.stringify(msg));
+}
+
+async function joinRoom(ip) {
+  $('#mpMsg').textContent = 'Conectando…';
+  const link = new ClientLink();
+  try {
+    await link.connect(ip);
+  } catch (e) {
+    $('#mpMsg').textContent = e.message;
+    return;
+  }
+  net = { role: 'client', link, inT: 0, targets: new Map(), del: 0 };
+  link.onMsg = (data) => clientMsg(data);
+  link.onClose = () => leaveNet('A conexão com a sala caiu.');
+  link.send(JSON.stringify({ t: 'hello', name: save.name || 'Amigo' }));
+  $('#mpMsg').textContent = 'Conectado. Esperando o anfitrião escolher o serviço…';
+}
+
+function clientMsg(data) {
+  let m;
+  try { m = JSON.parse(data); } catch (_) { return; }
+  if (m.t === 'welcome') {
+    const def = JOBS.find((j) => j.id === m.job);
+    buildSite(def, m.seed, m.owned);
+    TER.applyRect(m.terrain);
+    flush();
+    resetWater();
+    for (const v of world.vehicles) net.targets.set(v.id, null);
+    mode = 'play';
+    setupJobHud();
+    show(null);
+    input.reset();
+    cam.mode = 'chase'; cam.pitch = 0.46; cam.dist = 14;
+    if (m.you) setActive(fleet[m.you]);
+    toast(m.you ? `Você está na sala de ${m.host} com ${fleet[m.you].s.short}` : 'Sala cheia: você está assistindo', 3);
+  } else if (m.t === 'assign') {
+    setActive(fleet[m.you]);
+    toast(fleet[m.you].s.name, 1.2);
+  } else if (m.t === 's') {
+    if (!job) return;
+    for (const st of m.v) net.targets.set(st[0], st);
+    if (m.g) unpackGrains(new Int16Array(unb64(m.g).buffer));
+    if (m.d) TER.applyRect(m.d);
+    job.delivered = m.del;
+    net.drivers = m.drv;
+  } else if (m.t === 'done') {
+    const def = JOBS.find((j) => j.id === m.id);
+    save.money += m.pay + m.bonus;
+    save.done[def.id] = (save.done[def.id] || 0) + 1;
+    persist();
+    $('#dTitle').textContent = def.title;
+    $('#dPay').textContent = money(m.pay);
+    $('#dBonus').textContent = money(m.bonus);
+    const mins = Math.floor(m.time / 60), secs = Math.floor(m.time % 60);
+    $('#dTime').textContent = `${mins} min ${String(secs).padStart(2, '0')} s`;
+    $('#dTotal').textContent = money(m.pay + m.bonus);
+    mode = 'done';
+    show('#sDone');
+  } else if (m.t === 'wait') {
+    mode = 'mp';
+    show('#sMp');
+    $('#mpMsg').textContent = 'Conectado. Esperando o anfitrião escolher o serviço…';
+  } else if (m.t === 'end') leaveNet('O anfitrião fechou a sala.');
+}
+
+function clientFrame(dt, playing) {
+  // controles para o anfitrião (20 por segundo)
+  net.inT -= dt;
+  if (net.inT <= 0) {
+    net.inT = 0.05;
+    const i = playing ? input.state() : NONE;
+    const r = (x) => Math.round(x * 100) / 100;
+    net.link.send(JSON.stringify({ t: 'in', a: [r(i.thr), r(i.steer), r(i.ty), r(i.tx)] }));
+  }
+  // suaviza o estado recebido
+  const k = 1 - Math.exp(-dt * 14);
+  for (const v of world.vehicles) {
+    const st = net.targets.get(v.id);
+    if (!st) continue;
+    v.x = lerp(v.x, st[1], k); v.y = lerp(v.y, st[2], k); v.z = lerp(v.z, st[3], k);
+    v.yaw += wrapA(st[4] - v.yaw) * k;
+    v.pitch = lerp(v.pitch, st[5], k); v.roll = lerp(v.roll, st[6], k);
+    v.speed = st[7]; v.steerA = lerp(v.steerA, st[8], k);
+    v.lift = lerp(v.lift, st[9], k); v.curl = lerp(v.curl, st[10], k); v.bladePitch = lerp(v.bladePitch, st[11], k);
+    v.tilt = lerp(v.tilt, st[12], k); v.load = st[13]; v.mat = st[14]; v.rpm = st[15]; v.yawRate = st[16];
+    v.hydro = st[17]; v.digRate = st[18];
+    v.fx = Math.sin(v.yaw); v.fz = Math.cos(v.yaw);
+    v.sync();
+    v.animate(dt);
+  }
+}
+
+function leaveNet(msg) {
+  if (!net) return;
+  const n = net;
+  net = null;
+  if (n.role === 'host') { n.link.send(JSON.stringify({ t: 'end' })); n.link.stop(); }
+  else n.link.close();
+  buildSite(JOBS.find((j) => j.id === 'livre'), 7);
+  openTitle();
+  if (msg) toast(msg, 3);
+  updateMpStatus();
+}
+
+function updateMpStatus() {
+  const el = $('#mpBadge');
+  if (!net) { el.hidden = true; return; }
+  el.hidden = false;
+  if (net.role === 'host') {
+    const n = net.peers.size;
+    el.textContent = `Sala aberta · IP ${net.ip} · ${n ? n + ' amigo' + (n > 1 ? 's' : '') : 'esperando amigo'}`;
+  } else el.textContent = 'Conectado à sala';
+}
+
+async function openMp() {
+  mode = 'mp';
+  show('#sMp');
+  $('#mpName').value = save.name || '';
+  $('#mpMsg').textContent = isNative() ? 'Os dois celulares precisam estar no mesmo Wi‑Fi (ou um roteando o outro).' : 'No navegador, rode node tools/relay.mjs para testar.';
+  refreshRooms();
+}
+async function refreshRooms() {
+  const list = $('#mpRooms');
+  list.innerHTML = '<p class="muted">Procurando salas na rede…</p>';
+  const found = [];
+  await discoverRooms((r) => {
+    if (found.some((f) => f.ip === r.ip)) return;
+    found.push(r);
+    renderRooms(found);
+  }, 2500);
+  if (!found.length) list.innerHTML = '<p class="muted">Nenhuma sala encontrada. Peça para seu amigo tocar em "Criar sala" ou digite o IP dele abaixo.</p>';
+}
+function renderRooms(rooms) {
+  const list = $('#mpRooms');
+  list.innerHTML = '';
+  for (const r of rooms) {
+    const b = document.createElement('button');
+    b.className = 'room';
+    b.innerHTML = `<b>${r.name.replace(/[<>&]/g, '')}</b><span>${r.ip}</span>`;
+    b.onclick = () => joinRoom(r.ip);
+    list.appendChild(b);
+  }
+}
+function saveName() { const n = $('#mpName').value.trim().slice(0, 18); if (n) { save.name = n; persist(); } }
+
 /* ---------- botões ---------- */
 const tap = (sel, fn) => $(sel).addEventListener('click', (e) => { e.stopPropagation(); sound.start(); fn(); });
 tap('#tPlay', openJobs);
+tap('#tMp', openMp);
+tap('#mpHost', () => { saveName(); hostRoom(); });
+tap('#mpJoinIp', () => { saveName(); const ip = $('#mpIp').value.trim(); if (ip) joinRoom(ip); });
+tap('#mpScan', refreshRooms);
+tap('#mpBack', () => { if (net) leaveNet(); else openTitle(); });
+tap('#mpClose', () => leaveNet('Sala fechada.'));
 tap('#tShop', openShop);
 tap('#jShop', openShop);
 tap('#jBack', openTitle);
 tap('#sBack', () => (shopReturn === 'title' ? openTitle() : openJobs()));
 tap('#bCam', cycleCamera);
 tap('#bSwitch', () => {
-  const vs = world.vehicles;
-  if (vs.length < 2) { toast('Compre mais máquinas na garagem', 1.8); return; }
+  if (net && net.role === 'client') { net.link.send(JSON.stringify({ t: 'switch' })); return; }
+  const taken = new Set(net && net.role === 'host' ? [...net.peers.values()].map((p) => p.veh) : []);
+  const vs = world.vehicles.filter((v) => v === active || !taken.has(v));
+  if (vs.length < 2) { toast(taken.size ? 'As outras máquinas estão com seu amigo' : 'Compre mais máquinas na garagem', 1.8); return; }
   setActive(vs[(vs.indexOf(active) + 1) % vs.length]);
   toast(active.s.name, 1.2);
 });
@@ -468,10 +735,10 @@ tap('#pSound', () => {
   sound.setEnabled(save.sound);
   $('#pSound').textContent = 'Som: ' + (save.sound ? 'ligado' : 'desligado');
 });
-tap('#pQuality', () => { save.quality = { auto: 'high', high: 'low', low: 'auto' }[save.quality] || 'auto'; persist(); applyQuality(); });
-tap('#pQuit', () => { openJobs(); buildSite(JOBS.find((j) => j.id === 'livre'), 7); });
+for (const b of document.querySelectorAll('#qSeg button')) b.addEventListener('click', (e) => { e.stopPropagation(); save.quality = b.dataset.q; persist(); applyQuality(); });
+tap('#pQuit', () => { if (net && net.role === 'client') { leaveNet('Você saiu da sala.'); return; } openJobs(); buildSite(JOBS.find((j) => j.id === 'livre'), 7); if (net) net.link.send(JSON.stringify({ t: 'wait' })); });
 tap('#bFinish', finishJob);
-tap('#dOk', () => { openJobs(); buildSite(JOBS.find((j) => j.id === 'livre'), 7); });
+tap('#dOk', () => { if (net && net.role === 'client') { mode = 'play'; show(null); return; } openJobs(); buildSite(JOBS.find((j) => j.id === 'livre'), 7); if (net) net.link.send(JSON.stringify({ t: 'wait' })); });
 $('#pSound').textContent = 'Som: ' + (save.sound ? 'ligado' : 'desligado');
 addEventListener('keydown', (e) => {
   if (mode !== 'play') return;
@@ -504,28 +771,39 @@ function frame(now) {
   clouds.rotation.y += dt * 0.003;
 
   const playing = mode === 'play';
-  if (active) {
+  if (net && net.role === 'client') {
+    clientFrame(dt, playing);
+  } else if (active) {
     const inp = playing ? input.state() : NONE;
+    const remote = net && net.role === 'host' ? net.driving : null;
     for (const v of world.vehicles) {
-      if (v === active) {
-        v.hydraulics(dt, inp);
-        v.drive(dt, inp, world);
+      const rin = remote && remote.get(v);
+      if (v === active || rin) {
+        const ii = v === active ? inp : rin;
+        v.hydraulics(dt, ii);
+        v.drive(dt, ii, world);
+        if (v.tipT > 1.2) { v.place(v.x, v.z, v.yaw); v.tipT = 0; if (v === active) toast('A máquina tombou! Desviramos ela pra você.', 2.5); }
       } else {
         v.hydro = 0;
         if (Math.abs(v.speed) > 0) v.drive(dt, NONE, world);
       }
       v.pose(dt, false);
       v.sync();
-      if (v === active || v.kind === 'truck') v.applyTool(dt, world);
+      if (v === active || v.kind === 'truck' || (remote && remote.has(v))) v.applyTool(dt, world);
       v.animate(dt);
     }
   }
-  stepGrains(dt);
+  if (!(net && net.role === 'client')) {
+    stepGrains(dt);
+    relax(dt);
+    if (net && net.role === 'host') hostTick(dt);
+  }
+  stepWater(dt);
+  renderWater(dt, elapsed);
   renderGrains();
   updateParticles(dt);
   perf(dt);
   updateDust(dt);
-  relax(dt);
   flush();
 
   if (job) {

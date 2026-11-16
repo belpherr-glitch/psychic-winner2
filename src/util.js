@@ -47,3 +47,17 @@ export function fbm(n, x, y, oct) {
 
 export const money = (n) => 'R$ ' + Math.round(n).toLocaleString('pt-BR');
 export const m3 = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+// base64 de buffers binários (rede)
+export function b64(u8) {
+  let s = '';
+  const CH = 0x8000;
+  for (let i = 0; i < u8.length; i += CH) s += String.fromCharCode.apply(null, u8.subarray(i, i + CH));
+  return btoa(s);
+}
+export function unb64(str) {
+  const s = atob(str);
+  const u = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+  return u;
+}

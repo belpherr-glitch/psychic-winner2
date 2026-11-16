@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { MATS, heightAt, deposit, HALF, WATER_Y } from './terrain.js';
 import { toon } from './gfx.js';
+import { waterSurface, stirMud } from './water.js';
 
 export const GR = 0.11;          // raio do grão (m)
 export const GV = 0.0095;        // volume que cada grão carrega (m³)
@@ -284,10 +285,18 @@ export function stepGrains(dt) {
         }
       }
     }
-    // peças das máquinas e chão
+    // peças das máquinas, água e chão
     for (let i = 0; i < n; i++) {
       if (state[i] === 2) continue;
       collideBoxes(i, sub);
+      // dentro d'água: arrasto forte e empuxo (afunda devagar e turva a água)
+      const ws = waterSurface(px[i], pz[i]);
+      if (py[i] < ws) {
+        const k = 0.12;
+        qx[i] += (px[i] - qx[i]) * k; qy[i] += (py[i] - qy[i]) * k; qz[i] += (pz[i] - qz[i]) * k;
+        py[i] += G * h * h * 0.45;
+        if ((i & 7) === 0) stirMud(px[i], pz[i], 0.01);
+      }
       const R = sz[i] * 0.8;
       const hgt = heightAt(px[i], pz[i]);
       if (py[i] < hgt + R) {

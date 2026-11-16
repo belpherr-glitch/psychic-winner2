@@ -98,7 +98,7 @@ export function updateParticles(dt) {
 const DMAX = 160;
 const dmesh = new THREE.InstancedMesh(
   new THREE.IcosahedronGeometry(1, 1),
-  new THREE.MeshLambertMaterial({ color: 0xe8d6b4, transparent: true, opacity: 0.38, depthWrite: false, flatShading: true }),
+  new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.38, depthWrite: false, flatShading: true }),
   DMAX
 );
 dmesh.frustumCulled = false;
@@ -106,9 +106,10 @@ dmesh.count = 0;
 export const dustMesh = dmesh;
 const dust = [];
 const _m = new THREE.Matrix4();
-export function puff(x, y, z, vxx, vzz, size = 0.5) {
+const _pc = new THREE.Color();
+export function puff(x, y, z, vxx, vzz, size = 0.5, color = 0xe8d6b4) {
   if (dust.length >= DMAX) dust.shift();
-  dust.push({ x, y, z, vx: vxx + (Math.random() - 0.5) * 0.6, vz: vzz + (Math.random() - 0.5) * 0.6, vy: 0.4 + Math.random() * 0.5, t: 0, life: 1.4 + Math.random(), s: size });
+  dust.push({ x, y, z, vx: vxx + (Math.random() - 0.5) * 0.6, vz: vzz + (Math.random() - 0.5) * 0.6, vy: 0.4 + Math.random() * 0.5, t: 0, life: 1.4 + Math.random(), s: size, c: color });
 }
 export function updateDust(dt) {
   let k = 0;
@@ -120,11 +121,13 @@ export function updateDust(dt) {
     d.vx *= 1 - dt; d.vz *= 1 - dt;
     const f = d.t / d.life, s = d.s * (0.6 + f * 2.2) * (1 - f * f);
     _m.makeScale(s, s * 0.8, s).setPosition(d.x, d.y, d.z);
+    dmesh.setColorAt(k, _pc.set(d.c || 0xe8d6b4));
     dmesh.setMatrixAt(k++, _m);
     dust[k - 1] = d;
   }
   dust.length = k;
   dmesh.count = k;
   dmesh.instanceMatrix.needsUpdate = true;
+  if (dmesh.instanceColor) dmesh.instanceColor.needsUpdate = true;
 }
 export function clearDust() { dust.length = 0; dmesh.count = 0; }

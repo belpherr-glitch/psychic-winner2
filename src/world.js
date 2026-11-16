@@ -61,11 +61,15 @@ function rippleTexture() {
 export function makeWater(scene) {
   const tex = rippleTexture();
   const mat = toon({ color: 0x36c6dc, map: tex, transparent: true, opacity: 0.86 }, true);
-  const w = new THREE.Mesh(new THREE.PlaneGeometry(40, 520), mat);
-  w.rotation.x = -Math.PI / 2;
-  w.position.set(RIVER.cx, WATER_Y, 0);
-  scene.add(w);
-  return { mesh: w, tex };
+  // rio fora do canteiro (dentro, a água é simulada em water.js)
+  const L = 230;
+  for (const sg of [1, -1]) {
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(40, L), mat);
+    w.rotation.x = -Math.PI / 2;
+    w.position.set(RIVER.cx, WATER_Y, sg * (HALF + L / 2 - 0.6));
+    scene.add(w);
+  }
+  return { tex };
 }
 
 // chão fora do canteiro (o rio continua até a neblina)

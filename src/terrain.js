@@ -1,7 +1,7 @@
 // Terreno deformável: heightfield com material, camada solta e grama por vértice.
 // Material solto escorrega até o ângulo de repouso (autômato celular por chunks ativos).
 import * as THREE from 'three';
-import { clamp, lerp, smooth, rng, makeNoise, fbm } from './util.js';
+import { clamp, lerp, smooth, rng, makeNoise, fbm, b64, unb64 } from './util.js';
 import { toon, RAMP_GROUND } from './gfx.js';
 
 export const N = 160;            // células por lado
@@ -218,7 +218,12 @@ export function placeTufts(seed) {
 
 /* ---------- atualização da malha ---------- */
 let dx0 = G, dz0 = G, dx1 = -1, dz1 = -1;
+let nx0 = G, nz0 = G, nx1 = -1, nz1 = -1;
 export function dirty(x0, z0, x1, z1) {
+  if (x0 < nx0) nx0 = Math.max(0, x0);
+  if (z0 < nz0) nz0 = Math.max(0, z0);
+  if (x1 > nx1) nx1 = Math.min(G - 1, x1);
+  if (z1 > nz1) nz1 = Math.min(G - 1, z1);
   x0 = clamp(x0 - 1, 0, G - 1); z0 = clamp(z0 - 1, 0, G - 1);
   x1 = clamp(x1 + 1, 0, G - 1); z1 = clamp(z1 + 1, 0, G - 1);
   if (x0 < dx0) dx0 = x0;
@@ -478,4 +483,37 @@ export function pad(x0, z0, x1, z1, h, mat, edge = 3) {
     ROCK[i] = Math.min(ROCK[i], H[i] - 3);
     if (t > 0.5) { MAT[i] = mat; GRASS[i] = Math.min(GRASS[i], 1 - smooth(0.5, 1, t)); }
   });
+}
+
+/* ---------- rede: pacotes de terreno alterado ---------- */
+export function takeNetRect() {
+  if (nx1 < 0) return null;
+  const r = [nx0, nz0, nx1, nz1];
+  nx0 = G; nz0 = G; nx1 = -1; nz1 = -1;
+  return r;
+}
+export function resetNetRect() { nx0 = G; nz0 = G; nx1 = -1; nz1 = -1; }
+export function packRect(x0, z0, x1, z1) {
+  const w = x1 - x0 + 1, hgt = z1 - z0 + 1, n = w * hgt;
+  const h = new Int16Array(n), m = new Uint8Array(n), l = new Uint8Array(n), g = new Uint8Array(n);
+  let k = 0;
+  for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++, k++) {
+    const i = z * G + x;
+    h[k] = Math.round(H[i] * 400);
+    m[k] = MAT[i];
+    l[k] = Math.min(255, Math.round(LOOSE[i] * 100));
+    g[k] = Math.round(GRASS[i] * 255);
+  }
+  return { r: [x0, z0, x1, z1], h: b64(new Uint8Array(h.buffer)), m: b64(m), l: b64(l), g: b64(g) };
+}
+export function applyRect(p) {
+  const [x0, z0, x1, z1] = p.r;
+  const h = new Int16Array(unb64(p.h).buffer), m = unb64(p.m), l = unb64(p.l), g = unb64(p.g);
+  let k = 0;
+  for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++, k++) {
+    const i = z * G + x;
+    H[i] = h[k] / 400; MAT[i] = m[k]; LOOSE[i] = l[k] / 100; GRASS[i] = g[k] / 255;
+  }
+  dirty(x0, z0, x1, z1);
+  resetNetRect();
 }
