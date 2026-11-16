@@ -73,13 +73,18 @@
         else if (id === B.BENCH) { x.fillStyle = rgb(d.c1); x.fillRect(4, 14, 40, 9); x.strokeRect(4, 14, 40, 9); x.fillStyle = rgb(d.c2); x.fillRect(8, 23, 7, 19); x.fillRect(33, 23, 7, 19); x.strokeRect(8, 23, 7, 19); x.strokeRect(33, 23, 7, 19); }
         else { x.fillStyle = rgb(d.c2); x.fillRect(22, 20, 4, 24); x.fillStyle = rgb(d.c1); x.beginPath(); x.arc(24, 17, 10, 0, 7); x.fill(); x.stroke(); }
       } else {
-        // cubinho isométrico
-        const T = [[24, 4], [43, 14], [24, 24], [5, 14]], L = [[5, 14], [24, 24], [24, 45], [5, 35]], R = [[24, 24], [43, 14], [43, 35], [24, 45]];
-        const poly = (p, f) => { x.beginPath(); p.forEach((q, i) => (i ? x.lineTo(...q) : x.moveTo(...q))); x.closePath(); x.fillStyle = f; x.fill(); };
-        const top = id === B.GRASS || id === B.PGRASS ? d.c1 : d.c1, sideC = id === B.GRASS || id === B.PGRASS ? d.c2 : d.c1;
-        poly(T, rgb(top, 1.1)); poly(L, rgb(sideC, 0.85)); poly(R, rgb(sideC, 0.68));
-        if (d.style === 2 || d.style === 8) { x.fillStyle = rgb(d.style === 2 ? d.c1 : d.c2, 1.1); x.fillRect(11, 22, 6, 6); x.fillRect(30, 28, 6, 6); x.fillRect(22, 10, 6, 5); }
-        if (id === B.GRASS || id === B.PGRASS) { x.fillStyle = rgb(d.c1, 0.85); x.fillRect(5, 14, 19, 6); x.fillStyle = rgb(d.c1, 0.7); x.beginPath(); x.moveTo(24, 24); x.lineTo(43, 14); x.lineTo(43, 20); x.lineTo(24, 30); x.fill(); }
+        // cubinho isométrico com as texturas de pixel art
+        const tl = CB.TILE[id] || [0, 0, 0];
+        x.imageSmoothingEnabled = false;
+        const face = (tile, a, b, c, dd, e, f, dark) => {
+          x.setTransform(a, b, c, dd, e, f);
+          x.drawImage(CB.tileCanvas(tile), 0, 0);
+          if (dark) { x.fillStyle = 'rgba(10,6,30,' + dark + ')'; x.fillRect(0, 0, 16, 16); }
+        };
+        face(tl[0], 1.1875, -0.625, 1.1875, 0.625, 5, 14, 0);
+        face(tl[1], 1.1875, 0.625, 0, 1.3125, 5, 14, 0.18);
+        face(tl[1], 1.1875, -0.625, 0, 1.3125, 24, 24, 0.36);
+        x.setTransform(1, 0, 0, 1, 0, 0);
         x.lineWidth = 3; x.strokeStyle = ink;
         x.beginPath(); x.moveTo(24, 4); x.lineTo(43, 14); x.lineTo(43, 35); x.lineTo(24, 45); x.lineTo(5, 35); x.lineTo(5, 14); x.closePath(); x.stroke();
         x.lineWidth = 1.5; x.beginPath(); x.moveTo(5, 14); x.lineTo(24, 24); x.lineTo(43, 14); x.moveTo(24, 24); x.lineTo(24, 45); x.stroke();
@@ -951,32 +956,32 @@
     let ax = 0;
     if (p.swing > 0) { const k = 1 - p.swing / 0.34; ax = Math.sin(k * Math.PI) * 1.3; }
     else if (p.mine) ax = Math.abs(Math.sin(G.time * 14)) * 0.7;
-    const ox = -0.34 + bob * 0.015, oy = -0.3 + Math.abs(bob) * 0.025;
-    const L = { p: [ox, oy, 0.35], ax: -ax, az: bob * 0.04 };
-    vmb.box(m, ox, oy, 0.55, 0.075, 0.075, 0.22, SHIRT, 0, L);
-    vmb.box(m, ox, oy + 0.005, 0.8, 0.068, 0.068, 0.05, SKIN, 0, L);
+    const ox = -0.3 + bob * 0.012, oy = -0.27 + Math.abs(bob) * 0.02;
+    const L = { p: [ox, oy, 0.3], ax: -ax, az: bob * 0.04 };
+    vmb.box(m, ox - 0.02, oy - 0.03, 0.42, 0.05, 0.05, 0.14, SHIRT, 0, L);
+    vmb.box(m, ox - 0.02, oy - 0.025, 0.58, 0.045, 0.045, 0.035, SKIN, 0, L);
     const s = p.inv[p.sel];
     if (!s) return;
-    const hz = 0.82, hy = oy + 0.06;
+    const hz = 0.6, hy = oy - 0.02;
     if (s.id === B.TORCH) {
-      vmb.box(m, ox, hy + 0.08, hz, 0.014, 0.1, 0.014, [0.45, 0.3, 0.17], 0, L);
-      vmb.box(m, ox, hy + 0.2, hz, 0.026, 0.03, 0.026, [1, 0.72, 0.3], 1, L);
+      vmb.box(m, ox - 0.02, hy + 0.05, hz, 0.01, 0.07, 0.01, [0.45, 0.3, 0.17], 0, L);
+      vmb.box(m, ox - 0.02, hy + 0.13, hz, 0.018, 0.02, 0.018, [1, 0.72, 0.3], 1, L);
       return;
     }
-    if (s.id < 100) { vmb.box(m, ox + 0.02, hy + 0.04, hz + 0.02, 0.055, 0.055, 0.055, itemCol(s.id), D[s.id].light ? 0.6 : 0, L, 0.6); return; }
+    if (s.id < 100) { vmb.box(m, ox - 0.01, hy + 0.03, hz + 0.02, 0.04, 0.04, 0.04, itemCol(s.id), D[s.id].light ? 0.6 : 0, L, 0.6); return; }
     const it = IT[s.id], c = it.c.map((v) => v / 255), wood = [0.45, 0.3, 0.17], em = it.glow ? 0.7 : 0;
-    const T = { p: L.p, ax: L.ax - 0.35, az: L.az };
+    const T = { p: L.p, ax: L.ax - 0.5, az: L.az + 0.25 };
     if (it.tool === 'sword') {
-      vmb.box(m, ox, hy + 0.02, hz, 0.018, 0.06, 0.018, wood, 0, T);
-      vmb.box(m, ox, hy + 0.09, hz, 0.06, 0.014, 0.02, [0.3, 0.25, 0.2], 0, T);
-      vmb.box(m, ox, hy + 0.27, hz, 0.022, 0.17, 0.01, c, em, T);
-      vmb.box(m, ox, hy + 0.27, hz + 0.006, 0.008, 0.15, 0.008, c.map((v) => Math.min(1, v * 1.3)), em, T);
+      vmb.box(m, ox - 0.02, hy + 0.015, hz, 0.012, 0.04, 0.012, wood, 0, T);
+      vmb.box(m, ox - 0.02, hy + 0.06, hz, 0.04, 0.01, 0.014, [0.3, 0.25, 0.2], 0, T);
+      vmb.box(m, ox - 0.02, hy + 0.18, hz, 0.016, 0.11, 0.007, c, em, T);
+      vmb.box(m, ox - 0.02, hy + 0.18, hz + 0.005, 0.006, 0.1, 0.005, c.map((v) => Math.min(1, v * 1.3)), em, T);
     } else if (it.tool === 'pick') {
-      vmb.box(m, ox, hy + 0.12, hz, 0.014, 0.15, 0.014, wood, 0, T);
-      vmb.box(m, ox, hy + 0.27, hz, 0.022, 0.022, 0.08, c, em, T);
-      vmb.box(m, ox, hy + 0.255, hz + 0.1, 0.018, 0.03, 0.03, c, em, T);
-      vmb.box(m, ox, hy + 0.255, hz - 0.1, 0.018, 0.03, 0.03, c, em, T);
-    } else vmb.box(m, ox, hy + 0.05, hz, 0.06, 0.045, 0.06, c, 0, T);
+      vmb.box(m, ox - 0.02, hy + 0.08, hz, 0.01, 0.1, 0.01, wood, 0, T);
+      vmb.box(m, ox - 0.02, hy + 0.18, hz, 0.014, 0.014, 0.05, c, em, T);
+      vmb.box(m, ox - 0.02, hy + 0.17, hz + 0.065, 0.012, 0.02, 0.018, c, em, T);
+      vmb.box(m, ox - 0.02, hy + 0.17, hz - 0.065, 0.012, 0.02, 0.018, c, em, T);
+    } else vmb.box(m, ox - 0.02, hy + 0.03, hz, 0.04, 0.03, 0.04, c, 0, T);
   }
   function drawWorldBits() {
     batch.reset();

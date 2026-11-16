@@ -371,7 +371,7 @@
           if (top === B.SAND && bio === 1 && r < 0.003) { cactus(x, h, z, r2); continue; }
           if (top === B.GRASS || top === B.PGRASS) {
             if (r > 0.975) put(x, h + 1, z, B.FLOWER);
-            else if (r > (bio === 0 ? 0.5 : 0.65)) put(x, h + 1, z, B.TGRASS);
+            else if (r > (bio === 0 ? 0.62 : 0.74)) put(x, h + 1, z, B.TGRASS);
           }
         }
       for (const [cx, cy, cz, r] of isl) {

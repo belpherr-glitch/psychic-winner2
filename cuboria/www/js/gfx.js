@@ -46,81 +46,48 @@ void main() {
 }`;
   const FS_CHUNK = PREC + BIT + HASH + LIGHT + `
 
-${SH}uniform sampler2D uPal; uniform vec3 uSky; uniform vec3 uSunDir; uniform vec3 uLightDir; uniform float uDirK; uniform vec3 uHor; uniform float uTime; uniform float uPass;
+${SH}uniform sampler2D uPal; uniform sampler2D uAtlas; uniform vec3 uSky; uniform vec3 uSunDir; uniform vec3 uLightDir; uniform float uDirK; uniform vec3 uHor; uniform float uTime; uniform float uPass;
 uniform vec3 uFogCol; uniform vec2 uFog; uniform vec3 uSunCol;
 varying vec3 vPos; varying vec4 vLight; varying vec4 vInfo; varying float vDist; varying vec3 vView; varying vec3 vN; varying vec4 vSh;
 void main() {
   float n = vInfo.x, id = vInfo.y, ao = vInfo.z / 255.0, fl = vInfo.w;
   float u = (id + 0.5) / 64.0;
   vec3 c1 = texture2D(uPal, vec2(u, 0.125)).rgb, c2 = texture2D(uPal, vec2(u, 0.375)).rgb;
-  vec4 m = texture2D(uPal, vec2(u, 0.625));
+  vec4 m = texture2D(uPal, vec2(u, 0.625)), m3 = texture2D(uPal, vec2(u, 0.875));
   float style = floor(m.r * 255.0 + 0.5), emis = m.g, alpha = m.b;
-  vec2 uv = n < 1.5 ? vPos.zy : (n < 3.5 ? vPos.xz : vPos.xy);
-  vec2 lp = fract(uv);
-  vec2 px16 = floor(uv * 16.0);
-  float h = hash(px16 + id * 7.0);
-  // pedrinhas: células de Voronoi em pixels, com borda escura e brilho em cima
-  vec2 cg = floor(px16 / 5.0); float d1 = 99.0, d2 = 99.0; vec2 cid = vec2(0.0);
-  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
-    vec2 g = cg + vec2(float(i), float(j));
-    vec2 o = g * 5.0 + vec2(hash(g + id), hash(g.yx + id * 3.0)) * 5.0;
-    vec2 dd = px16 + 0.5 - o; float dl = max(abs(dd.x), abs(dd.y)) * 0.6 + length(dd) * 0.4;
-    if (dl < d1) { d2 = d1; d1 = dl; cid = g; } else if (dl < d2) d2 = dl;
-  }
-  float pebEdge = step(d2 - d1, 0.9), pebShade = 0.82 + 0.3 * hash(cid + id * 1.3);
-  bool side = n < 1.5 || n > 3.5, topf = n > 1.5 && n < 2.5, botf = n > 2.5 && n < 3.5;
   vec3 col = c1; float e = 0.0;
-  if (style > 19.5) { col = (bit(fl, 8.0) > 0.5 ? c2 : c1) * (0.92 + 0.1 * h); e = bit(fl, 8.0) > 0.5 ? 0.0 : emis; }
-  else if (style < 0.5) { col = c1 * pebShade * (0.95 + 0.08 * h); col = mix(col, c2 * 0.7, pebEdge * 0.85); }
-  else if (style < 1.5) { col = mix(c1, c2, step(0.5, hash(cid * 1.7 + id))) * pebShade; col = mix(col, c2 * 0.55, pebEdge); col *= 0.96 + 0.08 * h; }
-  else if (style < 2.5) { float ore = step(0.62, hash(cid * 2.3 + id));
-    col = ore > 0.5 ? c1 * (0.85 + 0.35 * h) : c2 * pebShade; col = mix(col, c2 * 0.5, pebEdge); e = ore > 0.5 && pebEdge < 0.5 ? emis : 0.0; }
-  else if (style < 3.5) {
-    if (!side) { float r = length(lp - 0.5); col = mix(c1 * 1.25, c2, step(0.5, fract(r * 5.0))); }
-    else { float st = hash(vec2(floor(uv.x * 8.0), id)); col = mix(c1, c2, step(0.62, st)) * (0.9 + 0.1 * h); } }
-  else if (style < 4.5) { float row = floor(uv.y * 4.0);
-    float seam = step(fract(uv.y * 4.0), 0.13) + step(0.94, fract(uv.x * 0.5 + hash(vec2(row, 3.0))));
-    col = mix(c1, c2, 0.3 * hash(vec2(row, id))) * (0.92 + 0.08 * h); col = mix(col, c2 * 0.75, clamp(seam, 0.0, 1.0)); }
-  else if (style < 5.5) {
-    float up = smoothstep(0.35, 0.72, normalize(vN).y);
-    float edge = 0.7 - 0.16 * hash(vec2(floor(uv.x * 8.0), 5.0));
-    float fr = side && !(vN.y > 0.35) ? step(edge, lp.y) : 0.0;
-    vec3 gc = c1 * (0.84 + 0.26 * h) * (hash(px16 * 0.5 + 9.0) > 0.85 ? 1.15 : 1.0), dc = mix(c2 * pebShade, c2 * 0.62, pebEdge);
-    col = mix(dc, gc, max(up, fr)); }
-  else if (style < 6.5) { float b = hash(floor(uv * 5.0) + id); if (b < 0.1) discard;
-    col = mix(c1, c2, step(0.6, b)) * (0.8 + 0.32 * h); }
-  else if (style < 7.5) { vec2 b = uv * vec2(2.0, 4.0); b.x += step(1.0, mod(floor(b.y), 2.0)) * 0.5; vec2 f = fract(b);
-    col = (f.x < 0.07 || f.y < 0.14) ? c2 : c1 * (0.88 + 0.18 * hash(floor(b))); }
-  else if (style < 8.5) { float d = fract((uv.x + uv.y) * 2.0 + hash(floor(uv * 2.0)));
-    col = mix(c1, c2, smoothstep(0.3, 0.95, d)) * (0.85 + 0.3 * h);
-    e = emis * (0.65 + 0.35 * sin(uTime * 2.0 + vPos.x + vPos.y + vPos.z)); }
-  else if (style < 9.5) { float f = vnoise(uv * 2.0 + vec2(uTime * 0.3, uTime * 0.15)) + 0.5 * vnoise(uv * 5.0 - uTime * 0.4);
-    col = mix(c1, c2, smoothstep(0.6, 1.3, f)); e = 1.0; }
-  else if (style < 10.5) { float f = vnoise(uv * 3.0 + vec2(uTime * 0.6, 0.0)) * 0.6 + 0.4 * vnoise(uv * 7.0 - vec2(0.0, uTime));
-    col = mix(c1, c2, smoothstep(0.55, 1.0, f)); if (topf) col = mix(col, vec3(1.0), 0.18 * step(0.75, f)); }
-  else if (style < 11.5) { float edge = step(lp.x, 0.07) + step(0.93, lp.x) + step(lp.y, 0.07) + step(0.93, lp.y);
-    float shine = step(0.85, fract((uv.x - uv.y) * 1.3)); col = mix(c1, c2, clamp(edge + shine * 0.6, 0.0, 1.0)); }
-  else { col = c1 * (0.86 + 0.16 * h);
-    if (side && lp.y > 0.12 && lp.y < 0.5 && lp.x > 0.22 && lp.x < 0.78) { col = c2 * (0.75 + 0.45 * vnoise(uv * 6.0 + uTime * 2.0)); e = 1.0; } }
-  vec3 N = normalize(vN);
-  if (style > 9.5 && style < 10.5) N = normalize(N + vec3(vnoise(vPos.xz * 1.3 + uTime * 0.7) - 0.5, 0.0, vnoise(vPos.zx * 1.3 - uTime * 0.6) - 0.5) * 0.35);
+  vec3 Nn = normalize(vN), A = abs(Nn);
+  bool topf = A.y >= A.x && A.y >= A.z && Nn.y > 0.0, botf = A.y >= A.x && A.y >= A.z && Nn.y <= 0.0, side = !topf && !botf;
+  if (style > 19.5) { col = (bit(fl, 8.0) > 0.5 ? c2 : c1); e = bit(fl, 8.0) > 0.5 ? 0.0 : emis; }
+  else {
+    float tile = topf || (side && Nn.y > 0.5) ? m3.r : botf ? m3.b : m3.g;
+    tile = floor(tile * 255.0 + 0.5);
+    vec2 uv = side ? (A.x > A.z ? vec2(vPos.z, vPos.y) : vec2(vPos.x, vPos.y)) : vPos.xz;
+    if (style > 9.5 && style < 10.5) uv += vec2(uTime * 0.25, uTime * 0.12);
+    if (style > 8.5 && style < 9.5) uv += vec2(uTime * 0.08, uTime * 0.05);
+    vec2 f = clamp(fract(uv), 0.002, 0.998);
+    if (side) f.y = 1.0 - f.y;
+    vec4 tx = texture2D(uAtlas, (vec2(mod(tile, 16.0), floor(tile / 16.0)) + f) / 16.0);
+    if (tx.a < 0.04) discard;
+    col = tx.rgb;
+    if (abs(tx.a - 0.784) < 0.02) e = max(emis, 0.85);
+    if (uPass > 0.5) alpha = id == 17.0 ? alpha : tx.a;
+  }
+  vec3 N = Nn;
   float ndl = max(dot(N, uLightDir), 0.0);
   float shd = vLight.x > 0.25 ? shadowAt(vSh) : 1.0;
   float sun = 0.48 + uDirK * ndl * shd * 0.95;
   if (style > 5.5 && style < 6.5) sun += uDirK * 0.18 * max(dot(-N, uLightDir), 0.0);
   vec3 L = shadeLight(vLight.x, vLight.yzw, uSky, sun);
-  vec3 A = abs(N);
   float sh = (A.x * 0.8 + A.z * 0.9 + A.y * (N.y > 0.0 ? 1.0 : 0.6)) / (A.x + A.y + A.z);
   vec3 lit = col * L * sh * ao;
   lit = mix(lit, col * 1.15, e);
   vec3 vd = normalize(vView);
   if (style > 9.5 && style < 10.5) {
-    float fr = pow(1.0 - max(dot(N, -vd), 0.0), 3.0);
-    lit = mix(lit, uHor * (0.35 + 0.75 * vLight.x), fr * 0.75);
-    lit += uSunCol * pow(max(dot(reflect(vd, N), uSunDir), 0.0), 90.0) * 2.5 * shd * vLight.x;
-    alpha = mix(alpha, 0.92, fr);
+    float fr = pow(1.0 - max(dot(N, -vd), 0.0), 4.0);
+    lit = mix(lit, uHor * (0.35 + 0.65 * vLight.x), fr * 0.55);
+    alpha = mix(alpha, 0.9, fr);
   }
-  if (style > 7.5 && style < 8.5) lit += uSunCol * pow(max(dot(reflect(vd, N), uLightDir), 0.0), 40.0) * 0.6 * shd * vLight.x;
   float fog = smoothstep(uFog.x, uFog.y, vDist);
   vec3 fc = uFogCol + uSunCol * pow(max(dot(vd, uSunDir), 0.0), 6.0) * 0.45;
   lit = mix(lit, fc, fog);
@@ -221,19 +188,16 @@ void main() {
     float zc = lin(vUv);
     float zn = min(min(lin(vUv + vec2(uTexel.x, 0.0)), lin(vUv - vec2(uTexel.x, 0.0))), min(lin(vUv + vec2(0.0, uTexel.y)), lin(vUv - vec2(0.0, uTexel.y))));
     float edge = smoothstep(0.06, 0.16, (zc - zn) / zc) * (1.0 - smoothstep(55.0, 120.0, zc));
-    c = mix(c, uInk, edge * 0.7);
+    c = mix(c, uInk, edge * 0.38);
   }
   c += texture2D(uRays, vUv).rgb * uRayCol;
   // cor: saturação, contraste em S, sombras puxando pro azul e luzes pro quente
   float l = dot(c, vec3(0.299, 0.587, 0.114));
-  c = mix(vec3(l), c, 1.38);
-  c = mix(c, c * vec3(0.86, 0.94, 1.12), (1.0 - smoothstep(0.0, 0.45, l)) * 0.5);
-  c = mix(c, c * vec3(1.08, 1.02, 0.92), smoothstep(0.55, 1.0, l) * 0.45);
-  c = max(c, 0.0);
-  c = (c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14) * 1.12;
+  c = mix(vec3(l), c, 1.12);
+  c = c / (1.0 + max(c - 1.0, 0.0) * 0.6);
   c = mix(c, c * vec3(0.35, 0.7, 1.1), uWater);
   vec2 v = vUv - 0.5;
-  c *= 1.0 - 0.38 * pow(length(v) * 1.35, 2.4);
+  c *= 1.0 - 0.22 * pow(length(v) * 1.35, 2.4);
   c = mix(c, vec3(0.9, 0.1, 0.15), uHurt * smoothstep(0.25, 0.75, length(v)));
   gl_FragColor = vec4(c, 1.0);
 }`;
@@ -267,7 +231,7 @@ void main() {
 
   // ───── modelos pequenos feitos de caixinhas: [x0,x1,y0,y1,z0,z1, usaCor2] em 1/16 de bloco ─────
   const MODELS = {
-    [B.TGRASS]: [[2, 3, 0, 14, 3, 4, 0], [5, 6, 0, 20, 9, 10, 1], [8, 9, 0, 11, 2, 3, 0], [11, 12, 0, 17, 7, 8, 0], [13, 14, 0, 12, 12, 13, 1], [4, 5, 0, 9, 13, 14, 0], [9, 10, 0, 22, 12, 13, 0]],
+    [B.TGRASS]: [[2, 3, 0, 14, 3, 4, 0], [5, 6, 0, 20, 9, 10, 1], [11, 12, 0, 17, 7, 8, 0], [13, 14, 0, 12, 12, 13, 1], [8, 9, 0, 22, 12, 13, 0]],
     [B.FLOWER]: [[7, 9, 0, 13, 7, 9, 1], [5, 11, 12, 16, 5, 11, 0], [7, 9, 16, 17, 7, 9, 0], [3, 7, 5, 6, 7, 9, 1], [10, 13, 8, 9, 7, 9, 1]],
     [B.MUSH]: [[6, 10, 0, 6, 6, 10, 1], [3, 13, 5, 9, 3, 13, 0], [5, 11, 9, 10, 5, 11, 0]],
     [B.TORCH]: [[7, 9, 0, 10, 7, 9, 1], [6, 10, 9, 13, 6, 10, 0]],
@@ -374,10 +338,17 @@ void main() {
         data.set([...d.c2, 255], (64 + id) * 4);
         const emis = d.emis != null ? d.emis : d.light ? 1 : 0, alpha = d.id === B.WATER ? 0.68 : d.id === B.GLASS ? 0.38 : 1;
         data.set([d.style, Math.round(emis * 255), Math.round(alpha * 255), 0], (128 + id) * 4);
+        const tl = CB.TILE[id] || [0, 0, 0];
+        data.set([tl[0], tl[1], tl[2], 255], (192 + id) * 4);
       });
       this.pal = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, this.pal);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 64, 4, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+      for (const k of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D, k, gl.NEAREST);
+      this.atlas = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, this.atlas);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, CB.ATLAS.size, CB.ATLAS.size, 0, gl.RGBA, gl.UNSIGNED_BYTE, CB.ATLAS.data);
       for (const k of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D, k, gl.NEAREST);
       for (const k of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D, k, gl.CLAMP_TO_EDGE);
     }
@@ -411,7 +382,7 @@ void main() {
     free(t) { if (!t) return; const gl = this.gl; if (t.dtex) gl.deleteTexture(t.dtex); gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fb); if (t.rb) gl.deleteRenderbuffer(t.rb); }
     resize() {
       const cw = this.cv.clientWidth, ch = this.cv.clientHeight, dpr = window.devicePixelRatio || 1;
-      const k = [0.55, Math.min(dpr, 1.5) * 0.7, Math.min(dpr, 2) * 0.9][this.quality];
+      const k = [0.5, Math.min(dpr, 1.5) * 0.62, Math.min(dpr, 2) * 0.85][this.quality];
       const w = Math.max(1, Math.round(cw * k)), h = Math.max(1, Math.round(ch * k));
       if (this.cv.width === w && this.cv.height === h && this.fb && this.lastQ === this.quality) return;
       this.lastQ = this.quality;
@@ -422,7 +393,7 @@ void main() {
       this.b1 = this.target(bw, bh, false);
       this.b2 = this.target(bw, bh, false);
       this.b3 = this.target(bw, bh, false);
-      const ss = [0, 1024, 2048][this.quality];
+      const ss = [0, 0, 2048][this.quality];
       if (ss) { const d = this.depthExt; this.depthExt = null; this.sh = this.target(ss, ss, true); this.depthExt = d; gl0(this.gl, this.sh.tex); } else this.sh = null;
     }
 
@@ -514,14 +485,9 @@ void main() {
       for (let y = -1; y <= 16; y++)
         for (let z = -1; z <= 16; z++)
           for (let x = -1; x <= 16; x++) {
-            let sum = 0;
-            for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
-              const b = PI(x - 1, y + dy, z + dz);
-              sum += SMOOTH[ids[b]] + SMOOTH[ids[b + 1]] + SMOOTH[ids[b + 2]];
-            }
             const raw = SMOOTH[ids[PI(x, y, z)]];
             if (raw) anyS = true;
-            den[QI(x, y, z)] = raw * 0.85 + (sum / 27) * 0.15;
+            den[QI(x, y, z)] = raw;
           }
       if (!anyS) return;
       const S0 = PL[0], S1 = PL[1], S2 = PL[2], S3 = PL[3];
@@ -562,8 +528,8 @@ void main() {
             dv[o + 10] = Math.max(0.45, Math.min(1, 1 - (avg / 8 - 0.5) * 1.7));
             ok[DI(x, y, z)] = 1;
           }
-      const V = (c, id) => {
-        const o = c * 11, nx = dv[o + 3], ny = dv[o + 4], nz = dv[o + 5], ax = Math.abs(nx), ay = Math.abs(ny), az = Math.abs(nz);
+      const V = (c, id, nx, ny, nz) => {
+        const o = c * 11, ax = Math.abs(nx), ay = Math.abs(ny), az = Math.abs(nz);
         const nrm = ay >= ax && ay >= az ? (ny > 0 ? 2 : 3) : ax >= az ? (nx > 0 ? 0 : 1) : nz > 0 ? 4 : 5;
         return O.v(Math.round(dv[o] * 32), Math.round(dv[o + 1] * 32), Math.round(dv[o + 2] * 32), dv[o + 6], dv[o + 7], dv[o + 8], dv[o + 9], nrm, id, Math.round(dv[o + 10] * 255), 0, nx, ny, nz);
       };
@@ -582,7 +548,15 @@ void main() {
               else if (a === 1) c = [DI(x - 1, y, z - 1), DI(x, y, z - 1), DI(x, y, z), DI(x - 1, y, z)];
               else c = [DI(x - 1, y - 1, z), DI(x, y - 1, z), DI(x, y, z), DI(x - 1, y, z)];
               if (!ok[c[0]] || !ok[c[1]] || !ok[c[2]] || !ok[c[3]]) continue;
-              const v0 = V(c[0], id), v1 = V(c[1], id), v2 = V(c[2], id), v3 = V(c[3], id);
+              // normal plana da face, apontando do lado sólido pro vazio
+              const o0 = c[0] * 11, o1 = c[1] * 11, o2 = c[2] * 11, o3 = c[3] * 11;
+              const ex = dv[o2] - dv[o0], ey = dv[o2 + 1] - dv[o0 + 1], ez = dv[o2 + 2] - dv[o0 + 2];
+              const fx = dv[o3] - dv[o1], fy = dv[o3 + 1] - dv[o1 + 1], fz = dv[o3 + 2] - dv[o1 + 2];
+              let nx = ey * fz - ez * fy, ny = ez * fx - ex * fz, nz = ex * fy - ey * fx;
+              const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
+              const want = sp ? 1 : -1, comp = a === 0 ? nx : a === 1 ? ny : nz;
+              if (comp * want < 0) { nx = -nx; ny = -ny; nz = -nz; }
+              const v0 = V(c[0], id, nx, ny, nz), v1 = V(c[1], id, nx, ny, nz), v2 = V(c[2], id, nx, ny, nz), v3 = V(c[3], id, nx, ny, nz);
               O.q(v0, v1, v2, v3, false);
             }
           }
@@ -771,6 +745,10 @@ void main() {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this.pal);
       gl.uniform1i(ck.u.uPal, 0);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, this.atlas);
+      gl.uniform1i(ck.u.uAtlas, 1);
+      gl.activeTexture(gl.TEXTURE0);
       for (let i = 0; i < 4; i++) gl.enableVertexAttribArray(i);
       const vis = this.visible(world, this.loading ? 400 : 7);
       for (const s of vis) if (s.O) this.drawSec(ck, s, s.O);
@@ -835,7 +813,7 @@ void main() {
         this.quadPass(this.bright);
         const sp = this.project(e[0] + env.sunDir[0] * 500, e[1] + env.sunDir[1] * 500, e[2] + env.sunDir[2] * 500);
         this.rayK = 0;
-        if (sp && env.sunDir[1] > -0.05 && env.depth < 0.7) {
+        if (sp && this.quality > 1 && env.sunDir[1] > -0.05 && env.depth < 0.7) {
           const ux = sp.x / this.cv.clientWidth, uy = 1 - sp.y / this.cv.clientHeight;
           const facing = Math.max(0, this.fwd[0] * env.sunDir[0] + this.fwd[1] * env.sunDir[1] + this.fwd[2] * env.sunDir[2]);
           this.rayK = facing * facing * (1 - env.depth);
@@ -868,13 +846,13 @@ void main() {
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, this.b1.tex);
       gl.uniform1i(po.u.uBloom, 1);
-      gl.uniform1f(po.u.uBloomK, bloom ? 1.25 : 0);
+      gl.uniform1f(po.u.uBloomK, bloom ? (this.quality > 1 ? 0.9 : 0.6) : 0);
       gl.activeTexture(gl.TEXTURE4);
       gl.bindTexture(gl.TEXTURE_2D, bloom && this.rayK > 0.01 ? this.b3.tex : this.b1.tex);
       gl.uniform1i(po.u.uRays, 4);
       const rk = bloom && this.rayK > 0.01 ? this.rayK * 0.9 : 0;
       gl.uniform3f(po.u.uRayCol, env.sunCol[0] * rk, env.sunCol[1] * rk, env.sunCol[2] * rk);
-      gl.uniform1f(po.u.uOutline, this.fb.dtex ? 1 : 0);
+      gl.uniform1f(po.u.uOutline, this.fb.dtex && this.quality > 0 ? 1 : 0);
       gl.uniform2f(po.u.uTexel, 1 / w, 1 / h);
       gl.uniform3fv(po.u.uInk, env.ink || [0.06, 0.05, 0.12]);
       if (this.fb.dtex) { gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.fb.dtex); gl.uniform1i(po.u.uDepth, 2); }
