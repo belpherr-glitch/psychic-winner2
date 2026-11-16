@@ -41,7 +41,7 @@ jobs:
       - name: Publicar em Releases (link direto pro celular)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
+          tag_name: vale-brisa-latest
           name: Vale Brisa - ultima versao
           body: "APK mais recente (commit ${{ github.sha }}). Baixe o arquivo vale-brisa.apk abaixo e instale."
           prerelease: true

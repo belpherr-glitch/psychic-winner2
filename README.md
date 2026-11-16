@@ -9,7 +9,7 @@ Jogo de fazenda 3D com visual pixel art para Android.
 ## Baixar o APK
 
 Cada push compila um APK novo pelo GitHub Actions e publica em
-[Releases › latest](../../releases/tag/latest). Todos os APKs usam a mesma chave de
+[Releases › vale-brisa-latest](../../releases/tag/vale-brisa-latest). Todos os APKs usam a mesma chave de
 assinatura (`android/app/valebrisa-dev.keystore`, chave de desenvolvimento), então dá pra
 instalar uma versão nova por cima da antiga sem perder o save.
 
