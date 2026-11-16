@@ -822,7 +822,7 @@
   // ───── desenho das entidades: modelos articulados (peça filha herda a matriz da mãe) ─────
   const MX = CB.M, MD = CB.MDL, SW = 0.34;
   const ease = (t) => t * t * (3 - 2 * t);
-  const PSC = 3.35 / 27; // pixel do personagem em blocos
+  const PSC = 3.35 / 30; // pixel do personagem em blocos
   function push(list, mesh, m, lit, sunK, flash) { list.push({ mesh, m, lit, sunK, flash }); }
   function lightFor(x, y, z) {
     // pega o ponto mais claro entre o meio e um pouco acima (o meio pode estar dentro do chão inclinado)
@@ -877,7 +877,7 @@
     const pose = armPose(false);
     const torso = MX.chain(root, MX.trans(0, 9 + bob, 0), MX.rotY(pose.twist), MX.rotX(moving ? 0.08 : 0));
     A(P.torso, torso);
-    A(P.head, MX.chain(torso, MX.trans(0, 9, 0), MX.rotY(-pose.twist * 0.7), MX.rotX(clamp(G.cam.pitch * 0.55, -0.6, 0.6))));
+    A(P.head, MX.chain(torso, MX.trans(0, 9, 0), MX.rotY(-pose.twist * 0.7), MX.rotX(clamp(G.cam.pitch * 0.55, -0.6, 0.6)), MX.scale(0.87, 0.87, 0.87)));
     A(P.arm, MX.chain(torso, MX.trans(-5.5, 8, 0), MX.rotX(sw * 0.75 - air * 0.9 + Math.sin(G.time * 2) * 0.03), MX.rotZ(-0.07 - air * 0.25)));
     const busy = p.swing > 0 || p.mine || p.inv[p.sel];
     const armR = MX.chain(torso, MX.trans(5.5, 8, 0), MX.rotX(busy ? pose.A + sw * -0.15 : -sw * 0.75 - air * 0.9), MX.rotZ(0.07 + (busy ? 0 : air * 0.25)));

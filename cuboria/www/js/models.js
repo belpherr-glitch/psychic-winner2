@@ -51,31 +51,34 @@
     for (const b of boxes) box(out, b, pal);
     return { data: new Float32Array(out), n: out.length / 10, vb: null };
   }
-  // sprite 16x16 com espessura: a imagem fica no plano YZ (cima da imagem = +z, direita = +y), pega em (gc, gr)
+  // sprite 16x16 com espessura e relevo: a silhueta inteira é fina e o miolo (pixels cercados) é mais grosso.
+  // A imagem fica no plano YZ (cima da imagem = +z, direita = +y), com a pega em (gc, gr).
   function sprite(rows, pal, gc, gr, th) {
     const out = [], G = [];
     for (let r = 0; r < 16; r++) { let row = (rows[r] || '').padEnd(16, '.'); if (/[Ww]/.test(row) && !/[Hhd]/.test(row)) row = row.replace(/k/g, 'q'); G.push(row); }
-    const at = (c, r) => (c < 0 || r < 0 || c > 15 || r > 15 ? null : pal[G[r][c]] || null);
-    const t = th || 0.8;
-    for (let r = 0; r < 16; r++)
-      for (let c = 0; c < 16; c++) {
-        const col = at(c, r);
-        if (!col) continue;
-        const y0 = c - gc, y1 = y0 + 1, z1 = gr - r + 0.5, z0 = z1 - 1;
-        // junta a corrida de mesma cor nas duas faces grandes
-        if (c === 0 || !at(c - 1, r) || key(at(c - 1, r)) !== key(col)) {
-          let c2 = c + 1;
-          while (c2 < 16 && at(c2, r) && key(at(c2, r)) === key(col)) c2++;
-          const ye = c2 - gc;
-          quad(out, [t, y0, z0], [t, ye, z0], [t, ye, z1], [t, y0, z1], [1, 0, 0], col);
-          quad(out, [-t, ye, z0], [-t, y0, z0], [-t, y0, z1], [-t, ye, z1], [-1, 0, 0], col);
+    const px = (c, r) => (c < 0 || r < 0 || c > 15 || r > 15 ? null : pal[G[r][c]] || null);
+    const inner = (c, r) => (px(c, r) && px(c - 1, r) && px(c + 1, r) && px(c, r - 1) && px(c, r + 1) ? px(c, r) : null);
+    const layer = (at, t, lo) => {
+      for (let r = 0; r < 16; r++)
+        for (let c = 0; c < 16; c++) {
+          const col = at(c, r);
+          if (!col) continue;
+          const y0 = c - gc, y1 = y0 + 1, z1 = gr - r + 0.5, z0 = z1 - 1;
+          quad(out, [t, y0, z0], [t, y1, z0], [t, y1, z1], [t, y0, z1], [1, 0, 0], col);
+          quad(out, [-t, y1, z0], [-t, y0, z0], [-t, y0, z1], [-t, y1, z1], [-1, 0, 0], col);
+          const e = [col[0] * 0.8, col[1] * 0.8, col[2] * 0.8, col[3]];
+          for (const sx of [-1, 1]) {
+            const a = sx * lo, bb = sx * t;
+            if (!at(c - 1, r)) quad(out, [a, y0, z0], [bb, y0, z0], [bb, y0, z1], [a, y0, z1], [0, -1, 0], e);
+            if (!at(c + 1, r)) quad(out, [bb, y1, z0], [a, y1, z0], [a, y1, z1], [bb, y1, z1], [0, 1, 0], e);
+            if (!at(c, r - 1)) quad(out, [a, y0, z1], [bb, y0, z1], [bb, y1, z1], [a, y1, z1], [0, 0, 1], e);
+            if (!at(c, r + 1)) quad(out, [bb, y0, z0], [a, y0, z0], [a, y1, z0], [bb, y1, z0], [0, 0, -1], e);
+          }
         }
-        const edge = [col[0] * 0.8, col[1] * 0.8, col[2] * 0.8, col[3]];
-        if (!at(c - 1, r)) quad(out, [-t, y0, z0], [t, y0, z0], [t, y0, z1], [-t, y0, z1], [0, -1, 0], edge);
-        if (!at(c + 1, r)) quad(out, [t, y1, z0], [-t, y1, z0], [-t, y1, z1], [t, y1, z1], [0, 1, 0], edge);
-        if (!at(c, r - 1)) quad(out, [-t, y0, z1], [t, y0, z1], [t, y1, z1], [-t, y1, z1], [0, 0, 1], edge);
-        if (!at(c, r + 1)) quad(out, [t, y0, z0], [-t, y0, z0], [-t, y1, z0], [t, y1, z0], [0, 0, -1], edge);
-      }
+    };
+    const t = th || 0.7;
+    layer(px, t, 0);
+    layer(inner, t * 1.9, t);
     return { data: new Float32Array(out), n: out.length / 10, vb: null, grip: [gc, gr] };
   }
   const K = [28, 22, 50, 0], WH = [255, 255, 255, 0];
@@ -84,33 +87,41 @@
 
   // ───────── personagem ─────────
   const PP = {
-    s: [255, 206, 162], S: [226, 168, 128], h: [112, 62, 36], H: [156, 92, 50], w: WH, b: [58, 130, 238], k: K, m: [176, 84, 84], n: [232, 176, 136],
-    t: [66, 150, 238], T: [116, 186, 252], d: [46, 112, 200], l: [112, 74, 42], g: [255, 214, 84], p: [62, 60, 124], P: [44, 42, 94], o: [86, 56, 38], O: [124, 84, 56],
+    s: [255, 208, 164], S: [228, 170, 130], h: [188, 98, 42], H: [226, 136, 58], B: [112, 56, 28], w: WH, b: [84, 150, 240], i: [44, 84, 180], k: K, m: [176, 84, 80], n: [234, 176, 136],
+    t: [136, 130, 110], T: [164, 158, 136], d: [102, 96, 82], l: [100, 66, 38], g: [255, 214, 84], p: [72, 88, 156], P: [52, 64, 118], o: [96, 62, 42], O: [138, 94, 62],
   };
-  const hair = (c, r) => (hsh(c, r, 5) < 0.22 ? 'H' : 'h');
+  const hair = (c, r) => (((c + r) & 1) && hsh(c, r, 5) < 0.7 ? 'H' : 'h');
+  const q = (b, f, o) => Object.assign({ b, f }, o);
+  const both = (b, f, o) => [q(b, f, o), q([-b[0] - b[3], b[1], b[2], b[3], b[4], b[5]], f, o)]; // espelha em x
+  const fringe = [1.5, 0.8, 1.7, 1, 0.6, 1.4, 0.9, 1.7, 1.1, 1.5].map((h, k) => q([-6.5 + k * 1.3, 8.5 - h, 5.5, 1.3, h, 0.9], k % 2 ? 'H' : 'h'));
   const player = {
+    // cabeça com o dobro de resolução (12x11 pixels no rosto); o jogo desenha em escala menor
     head: part([
-      { b: [-4, 0, -4, 8, 8, 8], f: 's',
-        front: ['hhHhhhHh', 'hhhhhhhh', 'hhshhssh', 'skksskks', 'swbssbws', 'swbssbws', 'sssnnsss', 'Ssmmmmss'],
-        side: ['hhHhhhhh', 'hhhhhHhh', 'shhhhhhh', 'sshhhhhh', 'ssShhHhh', 'ssshhhhh', 'sssshhhh', 'SsssShhh'],
-        back: hair, top: hair, bottom: () => 'S' },
-      { b: [-4.5, 6.6, -4.5, 9, 1.9, 9], f: 'h', top: hair },
-      { b: [-4.5, 5, 3.2, 3, 1.8, 1.4], f: 'H' }, { b: [0.5, 5.4, 3.2, 4, 1.4, 1.4], f: 'h' },
-      { b: [-4.6, 1.5, -4.6, 9.2, 5.2, 1.2], f: 'h' },
+      q([-6, 0, -5.5, 12, 11, 11], 's', {
+        front: ['hHhhhHhhhHhh', 'hhhHhhhHhhhh', 'hhHhhhhhhHhh', 'hshhsshhsshh', 'sBBBBssBBBBs', 'skkkkllkkkks'.replace(/l/g, 's'), 'swwbisswwbis', 'swwbisswwbis', 'ssssSnnSssss', 'ssssmmmmssss', 'SssssssssssS'],
+        side: ['hhhhhhhhhhh', 'hhhhhhhhhhh', 'hhhhhhhhhhh', 'shhhhhhhhhh', 'sshhhhhhhhh', 'ssshhhhhhhh', 'sssSshhhhhh', 'sssshhhhhhh', 'ssssshhhhhh', 'sssssshhhhh', 'SssssssShhh'].map((r, k) => r.replace(/h/g, (m, o) => (((o + k) & 1) && hsh(o, k, 6) < 0.7 ? 'H' : 'h'))),
+        back: hair, top: hair, bottom: () => 'S' }),
+      q([-1, 2.1, 5.5, 2, 1.5, 0.9], 'n'), ...both([1, 6, 5.5, 4, 0.9, 0.45], 'B'), ...both([6, 3.4, -1, 0.8, 2.6, 2], 'S'),
+      q([-6.5, 8.5, -6, 13, 3, 12], 'h', { top: hair, front: hair, side: hair, back: hair }), ...fringe,
+      ...both([5.6, 4.2, -6, 1, 4.6, 9.6], 'h', { side: hair }), q([-6.5, 1, -6.4, 13, 8, 1.2], 'h', { back: hair }), q([-5, -0.6, -6.2, 10, 1.9, 1], 'H'),
     ], PP),
     torso: part([
-      { b: [-4, 0, -2, 8, 9, 4], f: 't',
-        front: ['tTssssTt', 'tTtsstTt', 'tTttttTt', 'tttttttt', 'tttttttt', 'tttttttd', 'dddddddd', 'lllgglll', 'pppppppp'],
-        back: ['tttttttt', 'tTttttTt', 'tTttttTt', 'tttttttt', 'tttttttt', 'tttttttt', 'dddddddd', 'llllllll', 'pppppppp'],
-        side: ['tttt', 'tttt', 'tttt', 'tttd', 'tttd', 'ttdd', 'dddd', 'llll', 'pppp'], top: () => 't', bottom: () => 'P' },
+      q([-4, 0, -2, 8, 9, 4], 'p', { front: () => 'p', back: () => 'p', side: () => 'p', bottom: () => 'P' }),
+      // túnica por cima com gola em V, cinto com fivela
+      q([-4.5, 1, -2.5, 9, 8, 5], 't', { front: ['ttdsssdtt', 'tttdsdttt', 'tTttdttTt', 'tTtttttTt', 'ttttttttt', 'ttttttttt', 'ttdtttdtt', 'ddddddddd'], back: (c, r) => (r === 7 ? 'd' : c === 4 && r > 4 ? 'd' : 't'), side: (c, r) => (r === 7 ? 'd' : c === 0 ? 'T' : 't'), top: () => 't' }),
+      q([-4.7, 2.2, -2.7, 9.4, 1.4, 5.4], 'l'), q([-1, 2, 2.6, 2, 1.8, 0.5], 'g'), q([-0.4, 2.6, 3, 0.8, 0.6, 0.2], 'l'),
     ], PP),
     arm: part([
-      { b: [-1.5, -8, -1.5, 3, 9, 3], f: 't', front: ['tTt', 'tTt', 'ttt', 'ddd', 'sss', 'sss', 'sss', 'sss', 'sSs'], side: ['tTt', 'ttt', 'ttd', 'ddd', 'sss', 'sss', 'ssS', 'ssS', 'sSS'], back: ['ttt', 'ttt', 'ttd', 'ddd', 'sss', 'ssS', 'ssS', 'sSS', 'SSS'], top: () => 'T' },
-      { b: [-2, -11, -2, 4, 3.2, 4], f: 's', front: ['sSsS', 'ssss', 'SSSS'], side: ['ssss', 'sssS', 'SSSS'], bottom: () => 'S' },
+      q([-1.5, -8, -1.5, 3, 9, 3], 's', { front: ['ttt', 'ttt', 'ttt', 'ddd', 'sss', 'sss', 'sss', 'sss', 'sSs'], side: ['ttt', 'ttt', 'ttd', 'ddd', 'sss', 'sss', 'ssS', 'ssS', 'sSS'], back: ['ttt', 'ttt', 'ttd', 'ddd', 'sss', 'ssS', 'ssS', 'sSS', 'SSS'], top: () => 'T' }),
+      q([-2, -3, -2, 4, 4, 4], 't', { front: ['tTtt', 'tTtt', 'tttt', 'dddd'], side: ['tTtt', 'tttt', 'tttd', 'dddd'], back: ['tttt', 'tttt', 'tttd', 'dddd'], top: () => 'T' }),
+      // punho fechado com dedos marcados e polegar
+      q([-2, -11, -2, 4, 3.2, 4], 's', { front: ['sSsS', 'sSsS', 'SSSS'], side: ['ssss', 'sssS', 'SSSS'], bottom: () => 'S' }),
+      q([-1.8, -11.3, 1.9, 3.6, 1.5, 0.5], 'S'), q([-0.6, -9.6, 1.9, 1.2, 1.4, 0.7], 's'),
     ], PP),
     leg: part([
-      { b: [-2, -7, -2, 4, 7, 4], f: 'p', front: ['pppp', 'pppp', 'pPpp', 'pppp', 'pppP', 'pppp', 'PPPP'], side: ['pppp', 'pppP', 'pppP', 'ppPP', 'pppP', 'ppPP', 'PPPP'], back: () => 'P' },
-      { b: [-2.3, -9, -2.3, 4.6, 2.3, 5.6], f: 'o', front: ['oOOo', 'oooo'], top: () => 'O' },
+      q([-2, -7, -2, 4, 7, 4], 'p', { front: ['pppp', 'pppp', 'pPpp', 'pppp', 'pppP', 'pppp', 'PPPP'], side: ['pppp', 'pppP', 'pppP', 'ppPP', 'pppP', 'ppPP', 'PPPP'], back: () => 'P' }),
+      q([-2.3, -7.3, -2.3, 4.6, 1.5, 4.6], 'P'),
+      q([-2.4, -9, -2.4, 4.8, 2.4, 5.8], 'o'), q([-2.6, -7.1, -2.6, 5.2, 0.9, 5.2], 'O'), q([-2.2, -9, 3.3, 4.4, 1.6, 0.9], 'O'), q([-2.7, -9.4, -2.7, 5.4, 0.6, 6.7], 'k'),
     ], PP),
   };
 
@@ -159,49 +170,88 @@
     return (items[id] = m);
   };
 
-  // ───────── monstros ─────────
+  // ───────── monstros (esculpidos em camadas) ─────────
   function slime(c) {
-    const pal = { a: sh(c, 1), A: sh(c, 1.28), d: sh(c, 0.72), D: sh(c, 0.55), k: K, w: WH, m: sh(c, 0.4) };
+    const pal = { a: sh(c, 1), A: sh(c, 1.28), d: sh(c, 0.72), D: sh(c, 0.55), k: K, w: WH, m: sh(c, 0.36) };
     const skin = (c2, r, cols, rows) => (r === 0 ? 'A' : r >= rows - 1 ? 'D' : hsh(c2, r, 3) < 0.12 ? 'A' : c2 === 0 || c2 === cols - 1 ? 'd' : 'a');
+    const tier = (x, y, w, h) => q([-x, y, -x, w, h, w], 'a', { front: skin, side: skin, back: skin, top: (c2, r) => (c2 < w * 0.4 && r > w * 0.5 ? 'A' : 'a') });
     return part([
-      { b: [-6, 0, -6, 12, 5, 12], f: 'a', front: ['AAaaaaaaaaaa', 'akkwaaakkwaa', 'akkkaaakkkad', 'aaaammmmaadd', 'DDDDDDDDDDDD'], side: skin, back: skin, top: (c2, r) => (c2 < 3 && r < 3 ? 'A' : 'a') },
-      { b: [-5, 5, -5, 10, 4, 10], f: 'a', front: ['AAAaaaaaaa', 'AAaaaaaaaa', 'Aaaaaaaaaa', 'aaaaaaaaad'], side: skin, back: skin, top: (c2, r) => (c2 > 1 && c2 < 5 && r > 1 && r < 4 ? 'A' : 'a') },
-      { b: [-3, 9, -3, 6, 2, 6], f: 'A', front: ['AAAAAa', 'Aaaaaa'], side: ['AAaaaa', 'aaaaad'], top: () => 'A' },
+      tier(5.5, 0, 11, 2), tier(6.5, 1, 13, 4), tier(6, 5, 12, 2), tier(5, 7, 10, 2), tier(3.5, 9, 7, 1), tier(2, 10, 4, 1),
+      q([-6.9, 2, -4.5, 13.8, 2.4, 9], 'a'), q([-4.5, 2, -6.9, 9, 2.4, 13.8], 'a'),
+      // brilho, olhos saltados com reflexo, boca, gotas escorrendo
+      q([-4.8, 6.6, 2.8, 2.6, 2, 2.4], 'A'), q([-3.4, 8.7, 1.4, 1.2, 0.9, 1.2], 'w'),
+      ...both([1.3, 3, 6.5, 2.3, 2.7, 0.6], 'k'), ...both([1.4, 4.7, 7, 0.9, 0.9, 0.3], 'w'), q([-1.3, 1.6, 6.5, 2.6, 0.9, 0.5], 'm'),
+      q([5.9, 0, 1.6, 1.9, 1.5, 2.2], 'd'), q([-7.5, 0, -3, 1.7, 1.1, 2.6], 'd'), q([2, 0, -7.4, 2.4, 1.2, 1.6], 'd'),
     ], pal);
   }
   const SLIMES = [[90, 216, 128], [90, 166, 255], [255, 116, 178], [204, 128, 255]].map(slime);
-  const BP = { f: [104, 76, 128, 0], F: [140, 106, 166, 0], d: [70, 50, 90, 0], k: K, r: [255, 70, 70, 1], w: WH, m: [56, 40, 74, 0], M: [84, 60, 106, 0], e: [200, 120, 150, 0] };
+  const BP = { f: [104, 76, 128, 0], F: [140, 106, 166, 0], d: [70, 50, 90, 0], k: K, r: [255, 70, 70, 1], w: WH, m: [56, 40, 74, 0], M: [84, 60, 106, 0], e: [214, 130, 160, 0] };
   const fur = (c, r) => (hsh(c, r, 9) < 0.25 ? 'F' : hsh(c, r, 10) < 0.2 ? 'd' : 'f');
+  const memb = (c, r) => (hsh(c, r, 11) < 0.25 ? 'M' : 'm');
   const bat = {
     body: part([
-      { b: [-3, 0, -2.5, 6, 6, 5], f: 'f', front: ['fFffFf', 'frkkrf', 'fkffkf', 'ffkkff', 'fwkkwf', 'dfdddf'], side: fur, back: fur, top: fur },
-      { b: [-3, 6, -1, 2, 3, 1.5], f: 'd', front: ['fd', 'fe', 'fe'] }, { b: [1, 6, -1, 2, 3, 1.5], f: 'd', front: ['df', 'ef', 'ef'] },
+      q([-3, 0, -2.5, 6, 6, 5], 'f', { front: fur, side: fur, back: fur, top: fur }),
+      // focinho, presas, olhos acesos, tufo, orelhas com miolo, barriga e garras
+      q([-1.5, 1, 2.5, 3, 2, 1.4], 'F', { front: ['FkF', 'fff'] }), ...both([0.6, 0.1, 3.3, 0.7, 1.1, 0.5], 'w'),
+      ...both([1.1, 3.5, 2.5, 1.4, 1.3, 0.45], 'r'), q([-1.2, 5.5, 1.2, 2.4, 1.3, 1.5], 'F'),
+      ...both([1, 5.4, -1, 2.3, 3.6, 1.6], 'd'), ...both([1.5, 6, 0.5, 1.3, 2.4, 0.35], 'e'), ...both([1.6, 9, -0.8, 1, 1, 1.2], 'd'),
+      q([-2.3, -0.9, -1.6, 4.6, 1.3, 3.6], 'F'), ...both([0.9, -1.8, 0.2, 0.9, 1.1, 0.9], 'd'), q([-1, 0.5, -3.4, 2, 2.4, 1], 'd'),
     ], BP),
-    wingA: part([{ b: [0, -2.5, -0.5, 6, 5, 1], f: 'm', front: ['dddddd', 'mmMmmm', 'mMmmMm', 'mmmMmm', 'm.mm.m'], back: ['dddddd', 'mmmMmm', 'mMmmMm', 'mmMmmm', 'mmmmmm'] }], BP),
-    wingB: part([{ b: [0, -1.5, -0.5, 5, 4, 1], f: 'm', front: ['ddddd', 'mMmmm', 'mmmMm', 'mmmmm'], back: ['ddddd', 'mmmMm', 'mMmmm', 'mmmmm'] }], BP),
+    wingA: part([
+      q([0, -2.5, -0.5, 6, 5, 1], 'm', { front: memb, back: memb }), q([0, 2, -0.9, 6.3, 1, 1.8], 'd'), q([5.2, -3.6, -0.8, 1, 6.4, 1.6], 'd'), q([2.4, -3.2, -0.7, 0.7, 5.6, 1.4], 'd'),
+      q([0.5, -3.7, -0.4, 1.7, 1.3, 0.8], 'm'), q([3.2, -4.1, -0.4, 1.8, 1.7, 0.8], 'm'),
+    ], BP),
+    wingB: part([
+      q([0, -1.5, -0.5, 5, 4, 1], 'm', { front: memb, back: memb }), q([0, 2, -0.9, 5.5, 0.9, 1.8], 'd'), q([2.4, -2.2, -0.7, 0.7, 4.6, 1.4], 'd'),
+      q([4.9, 1.5, -0.7, 1.3, 1.8, 1.4], 'w'), q([0.8, -2.7, -0.4, 1.5, 1.3, 0.8], 'm'), q([3.3, -2.4, -0.4, 1.5, 1, 0.8], 'm'),
+    ], BP),
   };
-  const WP = { c: [118, 70, 190, 0.18], C: [160, 104, 236, 0.3], d: [78, 44, 136, 0.1], k: [16, 8, 34, 0], e: [255, 240, 140, 1], g: [210, 150, 255, 0.9], '.': null };
+  const WP = { c: [118, 70, 190, 0.18], C: [160, 104, 236, 0.3], d: [78, 44, 136, 0.1], k: [16, 8, 34, 0], e: [255, 240, 140, 1], g: [210, 150, 255, 0.9] };
   const cloth = (c, r, cols, rows) => (r === rows - 1 && (c + r) % 2 ? 'd' : hsh(c, r, 14) < 0.2 ? 'C' : hsh(c, r, 15) < 0.25 ? 'd' : 'c');
+  const cl = { front: cloth, side: cloth, back: cloth, top: cloth };
   const wisp = {
     body: part([
-      { b: [-4, 10, -4, 8, 8, 8], f: 'c', front: ['cCCccccc', 'cckkkkcc', 'ckkkkkkc', 'ckekkekc', 'ckekkekc', 'ckkkkkkc', 'cckkkkcc', 'dccccccd'], side: cloth, back: cloth, top: cloth },
-      { b: [-4.5, 6, -3.5, 9, 4, 7], f: 'c', front: cloth, side: cloth, back: cloth, top: () => 'd' },
-      { b: [-3.5, 2.5, -3, 7, 3.5, 6], f: 'd', front: cloth, side: cloth, back: cloth },
-      { b: [-2.5, 0, -2, 5, 2.5, 4], f: 'd' }, { b: [-1, -2, -1, 2, 2, 2], f: 'd' },
+      q([-4, 10, -4, 8, 8, 8], 'c', Object.assign({}, cl, { front: ['cCCccccc', 'cckkkkcc', 'ckkkkkkc', 'ckkkkkkc', 'ckkkkkkc', 'ckkkkkkc', 'cckkkkcc', 'dccccccd'] })),
+      // capuz com aba e ponta caída, olhos acesos no fundo, capa nos ombros, corpo afinando, tiras rasgadas e amuleto
+      q([-4.7, 17.1, 2.4, 9.4, 1.5, 2.5], 'C'), ...both([3.5, 10.4, 2.6, 1.3, 7, 2.1], 'c'), q([-3.1, 9.5, 2.8, 6.2, 1.1, 1.7], 'd'),
+      q([-2.2, 17.4, -5, 4.4, 2.1, 3.2], 'c'), q([-1.1, 18.8, -6, 2.2, 1.5, 2.2], 'd'), q([-0.5, 18, -6.8, 1, 1, 1.2], 'C'),
+      ...both([0.9, 12.9, 3.6, 1.3, 2.3, 0.4], 'e'),
+      q([-5.7, 6.8, -4.1, 11.4, 3.6, 8.2], 'c', cl), ...both([4.6, 5.6, -3, 1.3, 2, 6], 'd'),
+      q([-4.5, 4.4, -3.5, 9, 2.6, 7], 'c', cl), q([-3.5, 2.2, -3, 7, 2.4, 6], 'd', cl), q([-2.5, 0.4, -2, 5, 2, 4], 'd'), q([-1, -1.6, -1, 2, 2.2, 2], 'd'),
+      q([-4, 1.6, 2.6, 1.4, 3.6, 0.8], 'd'), q([-1.6, 0.2, 2.9, 1.4, 4.6, 0.8], 'c'), q([1.1, 1, 2.7, 1.4, 3.8, 0.8], 'd'), q([3, 2.2, 2.4, 1.2, 2.8, 0.8], 'c'),
+      q([-3.4, 0.8, -3.6, 1.4, 4.2, 0.8], 'd'), q([0.2, -0.2, -3.5, 1.5, 4.8, 0.8], 'c'), q([2.4, 1.4, -3.6, 1.3, 3.4, 0.8], 'd'),
+      q([-2.5, 9, 3.1, 5, 0.6, 0.7], 'g'), q([-1, 6.9, 3.4, 2, 2.1, 0.9], 'e'),
     ], WP),
-    hand: part([{ b: [-1.2, -1.2, -1.2, 2.4, 2.4, 2.4], f: 'g' }, { b: [-0.6, -0.6, 1.2, 1.2, 1.2, 1.2], f: 'e' }], WP),
+    hand: part([q([-1.3, -1.3, -1.3, 2.6, 2.6, 2.6], 'g'), q([-1.3, 1.3, 0.3, 0.7, 1.1, 0.9], 'C'), q([-0.35, 1.3, 0.3, 0.7, 1.4, 0.9], 'C'), q([0.6, 1.3, 0.3, 0.7, 1.1, 0.9], 'C'), q([-1.9, -0.4, 0, 0.7, 0.9, 0.9], 'C'), q([-0.7, -0.7, 1.3, 1.4, 1.4, 1.4], 'e')], WP),
   };
-  const GP = { a: [136, 142, 160, 0], b: [158, 164, 182, 0], d: [82, 86, 108, 0], D: [58, 60, 82, 0], m: [86, 170, 84, 0], M: [124, 206, 108, 0], e: [140, 255, 170, 1], k: K };
+  const GP = { a: [136, 142, 160, 0], b: [164, 170, 188, 0], d: [86, 90, 112, 0], D: [58, 60, 82, 0], m: [86, 170, 84, 0], M: [124, 206, 108, 0], e: [140, 255, 170, 1], k: K, r: [226, 92, 92, 0], w: [244, 236, 220, 0] };
   const rock = (c, r) => { const o = (Math.floor(r / 3) % 2) * 2; return r % 3 === 2 || (c + o) % 4 === 3 ? 'd' : hsh(c >> 1, r, 20) < 0.3 ? 'b' : 'a'; };
   const mossy = (c, r) => (r === 0 || (r === 1 && hsh(c, 1, 21) < 0.5) ? (hsh(c, r, 22) < 0.3 ? 'M' : 'm') : rock(c, r));
+  const rk = { front: rock, side: rock, back: rock }, mk = { front: mossy, side: mossy, back: mossy, top: () => 'm' };
+  const moss = (c, r) => (hsh(c, r, 23) < 0.35 ? 'M' : 'm');
   const golem = {
     torso: part([
-      { b: [-6, 0, -3.5, 12, 10, 7], f: 'a', front: (c, r) => (r >= 3 && r <= 6 && c >= 5 && c <= 6 ? 'e' : r >= 2 && r <= 7 && c >= 4 && c <= 7 && (r === 2 || r === 7 || c === 4 || c === 7) ? 'D' : mossy(c, r)), side: mossy, back: mossy, top: () => 'm', bottom: () => 'D' },
-      { b: [-7, 8.5, -4, 14, 2.5, 8], f: 'm', front: (c, r) => (hsh(c, r, 23) < 0.35 ? 'M' : 'm'), top: (c, r) => (hsh(c, r, 24) < 0.35 ? 'M' : 'm') },
+      q([-6, 0, -3.5, 12, 10, 7], 'a', Object.assign({}, mk, { bottom: () => 'D' })),
+      // placa do peito com runa acesa, ombros de pedra, manto de musgo, cinto de pedras, cristais e calombos nas costas
+      q([-4.5, 2, 3.5, 9, 6, 1.2], 'b', { front: (c, r) => ((c === 4 && r >= 1 && r <= 4) || (r === 2 && c >= 3 && c <= 5) ? 'e' : r === 0 || r === 5 || c === 0 || c === 8 ? 'd' : 'b') }),
+      ...both([4.5, 6.8, -3.8, 4.6, 4.6, 7.6], 'a', mk), ...both([5.4, 11.2, -1.5, 2.4, 1.4, 3], 'M'),
+      q([-7, 8.6, -4.1, 14, 2.5, 8.2], 'm', { front: moss, back: moss, top: moss }), q([-6.5, 0, -3.9, 13, 1.7, 7.8], 'd'), ...both([2, -0.4, 3.6, 2.2, 2, 0.8], 'b'),
+      q([-3.2, 6, -5.4, 1.7, 4.2, 2], 'e'), q([0.4, 7, -5.2, 1.5, 5.8, 1.8], 'e'), q([2.6, 5.4, -4.9, 1.3, 3.2, 1.5], 'e'), q([-5, 1.2, -4.7, 4.2, 3.2, 1.4], 'd'), q([1, 2, -4.5, 3.4, 2.4, 1.2], 'b'),
     ], GP),
-    head: part([{ b: [-3.5, 0, -3, 7, 6, 6], f: 'a', front: ['mMmmMmm', 'ddddddd', 'aeeaeea', 'adaaada', 'adddddd', 'aabaaba'], side: mossy, back: mossy, top: () => 'm' }], GP),
-    arm: part([{ b: [-2, -11, -2, 4, 12, 4], f: 'a', front: mossy, side: mossy, back: mossy, top: () => 'm' }, { b: [-2.8, -15, -2.8, 5.6, 4.5, 5.6], f: 'b', front: ['bbbbb', 'bdbdb', 'ddddd', 'DDDDD'], side: rock, bottom: () => 'D' }], GP),
-    leg: part([{ b: [-2.5, -8, -2.5, 5, 8, 5], f: 'a', front: rock, side: rock, back: rock }, { b: [-3, -8, -3, 6, 2.5, 7], f: 'd', top: () => 'a' }], GP),
+    head: part([
+      q([-3.5, 0, -3, 7, 6, 6], 'a', Object.assign({}, mk, { front: ['mMmmMmm', 'aabaaba', 'adddada', 'aDDaDDa', 'abaaaba', 'aabaaba'] })),
+      // sobrancelha saliente, olhos acesos afundados, queixo, tufo de musgo e um cogumelinho
+      q([-3.9, 3.9, 2.6, 7.8, 1.4, 1.3], 'd'), ...both([0.6, 2.7, 3, 2, 1.1, 0.3], 'e'), q([-3.1, -0.7, 2.4, 6.2, 1.9, 1.3], 'b'), ...both([0.4, 1, 3.6, 1.1, 0.8, 0.4], 'd'),
+      q([-2.6, 6, -2.2, 4.4, 1.3, 3.8], 'M'), q([1.6, 6, 0.6, 0.9, 1.7, 0.9], 'w'), q([0.9, 7.5, -0.1, 2.3, 0.9, 2.3], 'r'), q([1.6, 8.4, 0.6, 0.9, 0.5, 0.9], 'r'),
+    ], GP),
+    arm: part([
+      q([-2, -11, -2, 4, 12, 4], 'a', mk), q([-2.7, -1.6, -2.7, 5.4, 3.5, 5.4], 'd'), q([-2.7, -10.6, -2.7, 5.4, 4.2, 5.4], 'a', rk), q([-2.3, -3.2, 2, 2.5, 2.1, 0.5], 'm'),
+      q([-3.2, -15, -3.2, 6.4, 4.6, 6.4], 'b', { side: rock, back: rock, bottom: () => 'D' }), q([-3, -15.4, 3, 1.7, 1.8, 0.7], 'd'), q([-0.85, -15.4, 3, 1.7, 1.8, 0.7], 'd'), q([1.3, -15.4, 3, 1.7, 1.8, 0.7], 'd'),
+    ], GP),
+    leg: part([
+      q([-2.5, -8, -2.5, 5, 8, 5], 'a', rk), q([-2.9, -4.3, 2.2, 5.8, 2.5, 0.9], 'b'), q([-2.8, -5.7, -2.8, 5.6, 0.8, 5.6], 'm'),
+      q([-3.2, -8, -3, 6.4, 2.6, 7.4], 'd', { top: () => 'a' }), q([-3, -8, 4.3, 1.8, 1.6, 1], 'b'), q([-0.9, -8, 4.3, 1.8, 1.6, 1], 'b'), q([1.2, -8, 4.3, 1.8, 1.6, 1], 'b'),
+    ], GP),
   };
   CB.MDL = { player, SLIMES, bat, wisp, golem, part };
 })();
