@@ -64,11 +64,12 @@
     return c;
   };
 
-  // ranked: [{genes, fitness}] ordenado do melhor pro pior. Devolve n genomas novos.
+  // ranked: [{genes, fitness}] ordenado do melhor pro pior.
+  // Devolve n filhos {genes, from}: from = posição no ranking se for elite (cópia intacta), senão -1.
   NL.evolve = function (ranked, n, cfg) {
     const out = [];
     const nElite = Math.max(1, Math.round((n * cfg.elite) / 100));
-    for (let i = 0; i < nElite && i < ranked.length && out.length < n; i++) out.push(ranked[i].genes.slice());
+    for (let i = 0; i < nElite && i < ranked.length && out.length < n; i++) out.push({ genes: ranked[i].genes.slice(), from: i });
     const pool = Math.max(2, Math.ceil(ranked.length * 0.3));
     const pick = () => {
       let b = pool;
@@ -84,7 +85,7 @@
         c[k] = cross && Math.random() < 0.5 ? b[k] : a[k];
         if (Math.random() < rate) c[k] += NL.gauss() * cfg.str;
       }
-      out.push(c);
+      out.push({ genes: c, from: -1 });
     }
     return out;
   };

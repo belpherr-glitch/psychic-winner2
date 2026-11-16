@@ -2,6 +2,7 @@ package com.evolab.app;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.view.View;
 import android.view.WindowManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -12,19 +13,36 @@ import android.webkit.WebViewClient;
 public class MainActivity extends Activity {
     private WebView web;
 
+    // tela cheia: esconde barra de status e de navegação (voltam com um deslize)
+    @SuppressWarnings("deprecation")
+    private void immersive() {
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) immersive();
+    }
+
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         web = new WebView(this);
-        web.setBackgroundColor(0xFF0C0E13);
+        web.setBackgroundColor(0xFF2A2356);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setAllowFileAccess(true);
+        s.setMediaPlaybackRequiresUserGesture(false);
         web.setWebViewClient(new WebViewClient());
         web.setWebChromeClient(new WebChromeClient());
         setContentView(web);
+        immersive();
         if (state == null) web.loadUrl("file:///android_asset/index.html");
         else web.restoreState(state);
     }
