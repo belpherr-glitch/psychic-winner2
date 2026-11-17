@@ -61,15 +61,15 @@ const SCALE = 0.62; // unidades do modelo -> mundo
 // Altura, coxas, quadril e peito vêm do criador de personagem.
 export function bodyDims(cfg) {
   const H = [{ L: 0.68, sh: 0.48, neck: 0.03 }, { L: 0.86, sh: 0.56, neck: 0.04 }, { L: 1.04, sh: 0.63, neck: 0.05 }][cfg.height];
-  const th = [0.125, 0.15, 0.178][cfg.thighs];
-  const pw = [0.235, 0.27, 0.31][cfg.hips];
+  const th = [0.135, 0.16, 0.19][cfg.thighs];
+  const pw = [0.215, 0.245, 0.285][cfg.hips];
   const D = {
-    ...H, chest: cfg.chest, cw: 0.25, cd: 0.165, ww: 0.215, wd: 0.155, pw, pd: 0.18 + (pw - 0.27) * 0.5, hx: Math.max(pw * 0.5, th * 0.92),
-    th: [th, th * 0.78], sn: [th * 0.74, th * 0.5], ar: [0.072, 0.062], fr: [0.062, 0.054], hand: 0.066, foot: [0.08, 0.06, 0.12],
+    ...H, chest: cfg.chest, cw: 0.15, cd: 0.12, ww: 0.15, wd: 0.13, pw, pd: 0.17 + (pw - 0.245) * 0.5, hx: pw * 0.5,
+    th: [th, th * 0.6], sn: [th * 0.52, 0.042], ar: [0.054, 0.047], fr: [0.047, 0.041], hand: 0.05, foot: [0.056, 0.045, 0.088],
   };
-  D.a = (D.L - 0.12) / 2; // coxa e canela
+  D.a = (D.L - 0.12) / 2; // coxa e canela (o pé ocupa os últimos 0.12) // coxa e canela
   D.ua = D.sh * 0.52; D.fa = D.sh * 0.45; // braço e antebraço
-  D.chestY = D.sh * 0.6; D.ch = D.sh * 0.42; D.shX = D.cw * 0.84;
+  D.chestY = D.sh * 0.62; D.ch = D.sh * 0.36; D.shX = D.cw * 0.8;
   D.waistY = D.L + 0.1; D.shY = D.waistY + D.sh; D.kneeY = D.L - 0.02 - D.a;
   D.hemY = D.kneeY + 0.06; D.skirt = D.L + 0.07 - D.hemY;
   D.cadence = Math.sqrt(D.L / 0.86); // perna maior = passo mais lento
@@ -80,7 +80,7 @@ export function bodyDims(cfg) {
 
 
 // ---------- cabeça (espaço local do osso da cabeça) ----------
-const HC = [0, 0.36, 0], HR = [0.43, 0.4, 0.41];
+const HC = [0, 0.35, 0], HR = [0.47, 0.37, 0.42];
 const headPrims = () => prepare([
   ell(null, HC, HR),
   ell(null, [0.15, 0.17, 0.07], [0.27, 0.21, 0.27], { k: 0.12 }),
@@ -98,7 +98,7 @@ function faceTex(cfg, mode) {
   return canvasTex(256, 208, (ctx) => {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    const cy = 118, rx = 35, ry = 45;
+    const cy = 120, rx = 30, ry = 36;
     const eyeShape = (cx) => {
       // olho arredondado, topo um pouco reto (cara de anime)
       ctx.beginPath();
@@ -109,12 +109,12 @@ function faceTex(cfg, mode) {
       ctx.closePath();
     };
     for (const sg of [-1, 1]) {
-      const cx = 128 + sg * 57;
+      const cx = 128 + sg * 60;
       // bochecha larga e macia
-      const bx = cx + sg * 14, by = cy + ry + 4;
+      const bx = cx + sg * 10, by = cy + ry + 6;
       const g = ctx.createRadialGradient(bx, by, 2, bx, by, 34);
-      g.addColorStop(0, 'rgba(255,110,135,0.6)'); g.addColorStop(0.55, 'rgba(255,125,150,0.34)'); g.addColorStop(1, 'rgba(255,130,155,0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(bx, by, 36, 21, 0, 0, TAU); ctx.fill();
+      g.addColorStop(0, 'rgba(255,120,140,0.62)'); g.addColorStop(0.6, 'rgba(255,130,150,0.42)'); g.addColorStop(1, 'rgba(255,135,155,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(bx, by, 34, 24, 0, 0, TAU); ctx.fill();
 
       ctx.strokeStyle = lash;
       if (mode === 'closed') {
@@ -131,12 +131,12 @@ function faceTex(cfg, mode) {
       eyeShape(cx); ctx.clip();
       // íris ocupando quase o olho todo
       const ig = ctx.createLinearGradient(0, cy - ry, 0, cy + ry);
-      ig.addColorStop(0, shade(eye, -0.36)); ig.addColorStop(0.42, shade(eye, -0.05)); ig.addColorStop(0.8, shade(eye, 0.18)); ig.addColorStop(1, shade(eye, 0.32));
+      ig.addColorStop(0, shade(eye, -0.12)); ig.addColorStop(0.35, shade(eye, 0.16)); ig.addColorStop(0.75, shade(eye, 0.3)); ig.addColorStop(1, shade(eye, 0.4));
       ctx.fillStyle = ig; ctx.fillRect(cx - rx, cy - ry, rx * 2, ry * 2);
       // pupila suave
-      ctx.fillStyle = shade(eye, -0.42); ctx.globalAlpha = 0.85;
+      ctx.fillStyle = shade(eye, -0.22); ctx.globalAlpha = 0.6;
       ctx.beginPath();
-      if (cfg.eyes === 1) ctx.ellipse(cx, cy + 2, 7, 28, 0, 0, TAU); else ctx.ellipse(cx, cy - 3, 16, 21, 0, 0, TAU);
+      if (cfg.eyes === 1) ctx.ellipse(cx, cy + 2, 5, 22, 0, 0, TAU); else ctx.ellipse(cx, cy - 2, 11, 14, 0, 0, TAU);
       ctx.fill();
       ctx.globalAlpha = 1;
       // reflexo claro embaixo
@@ -157,12 +157,12 @@ function faceTex(cfg, mode) {
       const ox = cx + sg * (rx + 1), oy = cfg.eyes === 2 ? top + 2 : cy - ry * 0.42;
       ctx.beginPath(); ctx.moveTo(ox - sg * 3, oy); ctx.lineTo(ox + sg * 7, oy - (cfg.eyes === 1 ? 10 : 5)); ctx.stroke();
       // contorno fino nas laterais e cílio de baixo bem leve
-      ctx.lineWidth = 2.5; ctx.strokeStyle = shade(eye, -0.45);
+      ctx.lineWidth = 1.6; ctx.strokeStyle = shade(eye, -0.3);
       ctx.save(); eyeShape(cx); ctx.stroke(); ctx.restore();
       // brilhos
       ctx.fillStyle = '#ffffff';
       const hy = cfg.eyes === 2 ? cy + 2 : cy - 10;
-      ctx.beginPath(); ctx.ellipse(cx - sg * 2 - 11, hy - 6, 12, 14, -0.2, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx - sg * 2 - 10, hy - 4, 8, 9, -0.2, 0, TAU); ctx.fill();
       ctx.beginPath(); ctx.arc(cx + 10, cy + 14, 3.6, 0, TAU); ctx.fill();
       ctx.beginPath(); ctx.arc(cx + 2, hy - 5, 2.2, 0, TAU); ctx.fill();
     }
@@ -373,9 +373,9 @@ function clips(D) {
 const FIDGETS = ['look', 'cheer'];
 
 // ---------- contorno estilo anime (casca invertida) ----------
-const outlineMat = new THREE.MeshBasicMaterial({ color: '#4d3040', side: THREE.BackSide });
+const outlineMat = new THREE.MeshBasicMaterial({ color: '#6b4545', side: THREE.BackSide });
 outlineMat.onBeforeCompile = (sh) => {
-  sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n transformed += normalize(normal) * 0.011;');
+  sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n transformed += normalize(normal) * 0.009;');
 };
 
 const geoCache = new Map(); // esculturas já feitas (trocar de volta pra um estilo é instantâneo)
@@ -591,19 +591,20 @@ export class Character {
 
   bodyPrims() {
     const j = this.j, D = this.D, out = {};
-    out.pelvis = ell(j.hips, [0, 0.02, -0.01], [D.pw, 0.16, D.pd], { k: 0.06 });
-    out.waist = ell(j.torso, [0, 0.02, 0], [D.ww, 0.16, D.wd], { k: 0.1 });
+    out.pelvis = ell(j.hips, [0, -0.01, -0.01], [D.pw, 0.15, D.pd], { k: 0.06 });
+    out.belly = ell(j.torso, [0, 0.05, D.wd * 0.3], [D.ww * 0.95, 0.13, D.wd * 0.85], { k: 0.08 });
+    out.waist = ell(j.torso, [0, 0.08, 0], [D.ww * 0.9, 0.15, D.wd * 0.9], { k: 0.1 });
     out.chest = ell(j.torso, [0, D.chestY, 0.005], [D.cw, D.ch, D.cd], { k: 0.08 });
     if (D.chest > 0) {
-      const r = D.chest === 1 ? 0.09 : 0.12;
+      const r = D.chest === 1 ? 0.07 : 0.095;
       for (const sg of [1, -1]) out['bust' + sg] = ell(j.torso, [sg * 0.1, D.chestY - 0.02, D.cd - r * 0.55], [r, r * 0.92, r * 0.85], { k: 0.05 });
     }
     out.neck = cap(j.torso, [0, D.sh - 0.04, 0], [0, D.sh + 0.06 + D.neck, 0], 0.07, 0.07, { k: 0.05 });
     for (const s of ['L', 'R']) {
       out['shoulder' + s] = ell(j['arm' + s], [0, -0.01, 0], [D.ar[0] * 1.25, D.ar[0] * 1.25, D.ar[0] * 1.2], { k: 0.05 });
-      out['thigh' + s] = cap(j['leg' + s], [0, 0, 0], [0, -D.a, 0], D.th[0], D.th[1], { k: 0.035 });
+      out['thigh' + s] = cap(j['leg' + s], [0, 0.02, 0], [0, -D.a, 0], D.th[0], D.th[1], { k: 0.05 });
       out['shin' + s] = cap(j['shin' + s], [0, 0, 0], [0, -D.a, 0], D.sn[0], D.sn[1], { k: 0.03 });
-      out['foot' + s] = ell(j['shin' + s], [0, -D.a - 0.06, 0.035], D.foot, { k: 0.04 });
+      out['foot' + s] = ell(j['shin' + s], [0, -D.a - 0.075, 0.03], D.foot, { k: 0.04 });
       out['arm' + s] = cap(j['arm' + s], [0, 0, 0], [0, -D.ua, 0], D.ar[0], D.ar[1], { k: 0.03 });
       out['fore' + s] = cap(j['foreArm' + s], [0, 0, 0], [0, -D.fa, 0], D.fr[0], D.fr[1], { k: 0.03 });
       out['hand' + s] = ell(j['foreArm' + s], [0, -D.fa - 0.035, 0], [D.hand, D.hand * 1.12, D.hand * 0.9], { k: 0.03 });
@@ -644,7 +645,7 @@ export class Character {
   buildOutfit(P, o) {
     const j = this.j, D = this.D, b = this.bodyPrims();
     const inf = (p, t, more) => ({ ...p, infl: t, ...more });
-    const torsoUp = (t) => [inf(b.waist, t), inf(b.chest, t), ...(b.bust1 ? [inf(b.bust1, t), inf(b['bust-1'], t)] : [])];
+    const torsoUp = (t) => [inf(b.waist, t), inf(b.belly, t), inf(b.chest, t), ...(b.bust1 ? [inf(b.bust1, t), inf(b['bust-1'], t)] : [])];
     const prims = [], extra = [];
     if (o === 0) {
       // vestido: saia rodada em osso com mola (balança como sino), mangas bufantes, meias
@@ -686,14 +687,24 @@ export class Character {
     }
   }
 
+  // lâmina de cabelo: sequência de elipsoides achatados com física (fica liso, não "embolotado")
+  sheetChain(P, parent, root, rot, widths, depth, len, sp, prims, extra) {
+    let b = this.pbone(P, parent, root, rot, { len, ...sp });
+    for (let i = 0; i < widths.length; i++) {
+      extra.push(b);
+      prims.push(ell(b, [0, -len * 0.5, 0], [widths[i], len * 0.72, depth * (1 - i * 0.08)], { k: 0.09, fall: 0.06 }));
+      if (i < widths.length - 1) b = this.pbone(P, b, [0, -len, 0], [0, 0, 0], { len, ...sp, stiff: (sp.stiff || 14) * 0.85 });
+    }
+  }
+
   buildHair(P, style, tall) {
     const j = this.j, H = j.head, prims = [], extra = [];
-    const hair = this.mat(P, 'hair');
+    const hair = this.mat(P, 'hair', { soft: true });
     // calota: maior que a cabeça, puxada pra cima e pra trás; depois "recorta" o rosto
-    prims.push(ell(H, [0, 0.43, -0.045], [0.485, 0.455, 0.475]));
+    prims.push(ell(H, [0, 0.38, -0.04], [0.5, 0.39, 0.47]));
     if (style === 2 || style === 6) prims.push(ell(H, [0, 0.2, -0.16], [0.5, 0.26, 0.38], { k: 0.08 }));
     if (style === 4) prims.push(plane(H, [0, 0.08, 0], [0, -1, 0], { k: 0.05 }));
-    prims.push(ell(H, [0, 0.19, 0.44], [0.39, 0.36, 0.42], { op: 'sub', k: 0.035 }));
+    prims.push(ell(H, [0, 0.17, 0.44], [0.42, 0.34, 0.42], { op: 'sub', k: 0.035 }));
     // franja: mechas afiladas que descem pela testa (em 2 trechos pra acompanhar a curva)
     const bang = (az, tipAz, tipEl, r) => {
       const a = HP(az, 1.0, 0.05), m = HP((az + tipAz) / 2, (1.0 + tipEl) / 2 + 0.05, 0.085), e = HP(tipAz, tipEl, 0.075);
@@ -701,36 +712,36 @@ export class Character {
     };
     const spiky = style === 4;
     const fr = spiky ? 0.08 : 0;
-    bang(-1.0, -1.14, 0.0, 0.13); bang(-0.68, -0.78, 0.24 + fr, 0.13); bang(-0.34, -0.4, 0.3 + fr, 0.135); bang(0.0, -0.02, 0.27 + fr, 0.14);
-    bang(0.34, 0.4, 0.31 + fr, 0.135); bang(0.68, 0.78, 0.24 + fr, 0.13); bang(1.0, 1.14, 0.0, 0.13);
+    bang(-1.0, -1.14, -0.05, 0.13); bang(-0.68, -0.78, 0.16 + fr, 0.13); bang(-0.34, -0.4, 0.2 + fr, 0.135); bang(0.0, -0.02, 0.18 + fr, 0.14);
+    bang(0.34, 0.4, 0.21 + fr, 0.135); bang(0.68, 0.78, 0.16 + fr, 0.13); bang(1.0, 1.14, -0.05, 0.13);
     // mechas laterais soltas, na frente da orelha
     for (const sg of [1, -1]) {
       const long = style === 0 || style === 1;
       if (long) {
         // cortina lisa dos lados do rosto, descendo até o peito (como nas referências)
-        const a = HP(sg * 1.2, 0.55, 0.1), m = HP(sg * 1.22, 0.0, 0.16);
-        prims.push(cap(H, a, m, 0.12, 0.125, { k: 0.05 }));
-        this.lockChain(P, H, m, [0, 0, sg * 0.1], [0.125, 0.13, 0.12, 0.09, 0.03], 0.16, { stiff: 18, maxAngle: 0.5, wind: 0.9, gravity: 0.5 }, prims, extra);
+        const a = HP(sg * 1.25, 0.55, 0.08), m = HP(sg * 1.25, -0.05, 0.14);
+        prims.push(cap(H, a, m, 0.09, 0.095, { k: 0.06 }));
+        this.sheetChain(P, H, m, [0, sg * 0.6, sg * 0.08], [0.1, 0.1, 0.09, 0.07, 0.04], 0.05, 0.15, { stiff: 18, maxAngle: 0.5, wind: 0.9, gravity: 0.5 }, prims, extra);
       } else {
         const a = HP(sg * 1.3, 0.5, 0.07), m = HP(sg * 1.27, -0.05, 0.1);
         prims.push(cap(H, a, m, 0.085, 0.075, { k: 0.03 }));
         this.lockChain(P, H, m, [0, 0, sg * 0.12], [0.075, 0.02], 0.2, { stiff: 20, maxAngle: 0.5, wind: 0.9 }, prims, extra);
       }
     }
-    const ahoge = () => this.lockChain(P, H, [0.02, 0.86, 0.02], [0.5, 0, -2.3], [0.035, 0.028, 0.006], 0.11, { stiff: 22, gravity: 0, maxAngle: 0.8, wind: 1.6 }, prims, extra);
+    const ahoge = () => this.lockChain(P, H, [0.02, 0.76, 0.02], [0.5, 0, -2.3], [0.035, 0.028, 0.006], 0.11, { stiff: 22, gravity: 0, maxAngle: 0.8, wind: 1.6 }, prims, extra);
 
     if (style === 0) {
       // chiquinhas compridas
       for (const sg of [1, -1]) {
-        this.lockChain(P, H, [sg * 0.47, 0.56, -0.1], [0.1, 0, sg * 0.5], [0.1, 0.15, 0.155, 0.12, 0.07, 0.02], 0.17, { stiff: 11, maxAngle: 0.8, gravity: 0.6 }, prims, extra);
+        this.lockChain(P, H, [sg * 0.47, 0.56, -0.1], [0.1, 0, sg * 0.5], [0.09, 0.125, 0.13, 0.105, 0.065, 0.02], 0.17, { stiff: 11, maxAngle: 0.8, gravity: 0.6 }, prims, extra);
         this.bit(P, H, new THREE.SphereGeometry(0.075, 10, 8), this.mat(P, 'acc'), [sg * 0.475, 0.565, -0.1]).add(new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), outlineMat));
       }
       if (tall) ahoge();
     } else if (style === 1) {
       // cabelão solto até a cintura
       // cabelão liso até a cintura: 4 mechas largas atrás
-      for (const [x, z, r] of [[-0.32, -0.26, 0.16], [-0.12, -0.36, 0.18], [0.12, -0.36, 0.18], [0.32, -0.26, 0.16]]) {
-        this.lockChain(P, H, [x, 0.3, z], [-0.08, 0, x * 0.3], [r, r * 1.12, r * 1.1, r * 1.0, r * 0.75, 0.035], 0.19, { stiff: 13, maxAngle: 0.5, gravity: 0.5 }, prims, extra);
+      for (const sg of [1, -1]) {
+        this.sheetChain(P, H, [sg * 0.17, 0.3, -0.33], [-0.06, sg * 0.3, sg * 0.03], [0.24, 0.27, 0.27, 0.25, 0.2, 0.1], 0.09, 0.2, { stiff: 13, maxAngle: 0.5, gravity: 0.5 }, prims, extra);
       }
       if (tall) ahoge();
     } else if (style === 2) {
@@ -755,7 +766,7 @@ export class Character {
       const puffs = [[0, 1.2, 0.12], [0.8, 0.9, 0.13], [-0.8, 0.9, 0.13], [1.7, 0.7, 0.14], [-1.7, 0.7, 0.14], [2.6, 0.8, 0.13], [-2.6, 0.8, 0.13], [1.5, 0.1, 0.16], [-1.5, 0.1, 0.16], [2.3, 0.15, 0.16], [-2.3, 0.15, 0.16], [3.14, 0.3, 0.16], [1.9, -0.5, 0.14], [-1.9, -0.5, 0.14], [2.7, -0.45, 0.15], [-2.7, -0.45, 0.15]];
       for (const p of puffs) if (tall || p[1] < 1) prims.push(ell(H, HP(p[0], p[1], 0.1), [p[2] + 0.03, p[2], p[2] + 0.03], { k: 0.025 }));
     }
-    this.skinned(P, P.key, prims, hair, { h: 0.019, extra, fall: 0.04 });
+    this.skinned(P, P.key, prims, hair, { h: 0.016, extra, fall: 0.04 });
   }
 
   buildHat(P, hat) {
