@@ -21,7 +21,7 @@ for (const [h, t, hp, c] of [[0, 0, 0, 0], [2, 2, 2, 2], [1, 1, 1, 0]]) looks.pu
 const files = [];
 for (let i = 0; i < looks.length; i++) {
   for (const ang of [0, Math.PI]) {
-    await p.evaluate(([c, a]) => window.studio.show(c, { ang: a }), [{ ...base, ...looks[i] }, ang]);
+    await p.evaluate(([c, a]) => window.studio.show(c, { ang: a, extra: 0.45 }), [{ ...base, ...looks[i] }, ang]);
     const f = `${out}.${i}.${ang ? 'b' : 'f'}.png`;
     await p.locator('#c').screenshot({ path: f });
     files.push(f);

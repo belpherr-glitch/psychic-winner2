@@ -61,11 +61,11 @@ const SCALE = 0.62; // unidades do modelo -> mundo
 // Altura, coxas, quadril e peito vêm do criador de personagem.
 export function bodyDims(cfg) {
   const H = [{ L: 0.64, sh: 0.58, neck: 0 }, { L: 0.8, sh: 0.66, neck: 0 }, { L: 0.98, sh: 0.74, neck: 0 }][cfg.height];
-  const th = [0.11, 0.128, 0.148][cfg.thighs];
-  const pw0 = [0.235, 0.26, 0.29][cfg.hips], hx = th + 0.028, pw = Math.max(pw0, hx + th * 0.9);
+  const th = [0.14, 0.16, 0.185][cfg.thighs];
+  const pw0 = [0.3, 0.33, 0.37][cfg.hips], hx = th + 0.02, pw = Math.max(pw0, hx + th * 0.95);
   const D = {
-    ...H, chest: cfg.chest, cw: 0.215, cd: 0.16, ww: 0, wd: 0, pw, pd: 0.19 + (pw - 0.26) * 0.4, hx,
-    th: [th, th * 0.8], sn: [th * 0.72, th * 0.55], ar: [0.056, 0.048], fr: [0.048, 0.042], hand: 0.052, foot: [0.07, 0.055, 0.1],
+    ...H, chest: cfg.chest, cw: 0.245, cd: 0.17, ww: 0, wd: 0, pw, pd: 0.2 + (pw - 0.33) * 0.4, hx,
+    th: [th, th * 0.85], sn: [th * 0.8, th * 0.62], ar: [0.062, 0.054], fr: [0.054, 0.048], hand: 0.06, foot: [0.08, 0.06, 0.11],
   };
   D.a = (D.L - 0.12) / 2; // coxa e canela (o pé ocupa os últimos 0.12) // coxa e canela
   D.ua = D.sh * 0.42; D.fa = D.sh * 0.36; // braço e antebraço
@@ -788,7 +788,7 @@ export class Character {
   }
 
   buildHat(P, hat) {
-    const H = this.j.head, top = 0.86;
+    const H = this.j.head, top = 0.78;
     if (hat === 1) {
       // boina com cabinho
       const m = this.piece(P, H, 'beret', [ell(null, [0.04, 0.08, 0], [0.4, 0.13, 0.38]), ell(null, [0, 0.01, 0], [0.31, 0.055, 0.3], { k: 0.03 }), cap(null, [0.04, 0.19, 0], [0.065, 0.27, 0], 0.02, 0.012, { k: 0.015 })], this.mat(P, 'acc'), { p: [0.07, top - 0.02, -0.03], r: [0.12, 0, -0.24] });
@@ -816,7 +816,7 @@ export class Character {
       this.ribbonTails(P, g, [0, -0.03, -0.05], 0.17);
     } else if (hat === 4) {
       const gold = this.mat(P, '#f8d45c');
-      const g = this.bit(P, H, new THREE.CylinderGeometry(0.15, 0.13, 0.09, 12, 1, true), this.mat(P, '#f8d45c', { side: THREE.DoubleSide }), [0.13, top + 0.02, 0.02], 1, [0.05, 0, -0.32]);
+      const g = this.bit(P, H, new THREE.CylinderGeometry(0.15, 0.13, 0.09, 12, 1, true), this.mat(P, '#f8d45c', { side: THREE.DoubleSide }), [0.15, top - 0.02, 0.02], 1.5, [0.05, 0, -0.32]);
       for (let i = 0; i < 5; i++) this.bit(P, g, new THREE.ConeGeometry(0.045, 0.1, 4), gold, [Math.cos(i * 1.257) * 0.14, 0.09, Math.sin(i * 1.257) * 0.14]);
       this.bit(P, g, new THREE.SphereGeometry(0.03, 8, 6), this.mat(P, 'acc'), [0, 0, 0.15]);
     } else if (hat === 5) {
@@ -877,7 +877,7 @@ export class Character {
         const w = this.pbone(P, j.torso, [sg * 0.05, D.sh * 0.72, backZ], [0, sg * 0.5, 0]);
         w.userData.sg = sg;
         P.wings.push(w);
-        this.piece(P, w, 'wing' + sg, [ell(null, [sg * 0.17, 0.09, 0], [0.2, 0.08, 0.03]), ell(null, [sg * 0.15, -0.02, 0], [0.17, 0.07, 0.03], { k: 0.02 }), ell(null, [sg * 0.11, -0.1, 0], [0.12, 0.055, 0.028], { k: 0.02 })], this.mat(P, '#ffffff'), { h: 0.011 });
+        this.piece(P, w, 'wing' + sg, [ell(null, [sg * 0.17, 0.09, 0], [0.2, 0.08, 0.03]), ell(null, [sg * 0.15, -0.02, 0], [0.17, 0.07, 0.03], { k: 0.02 }), ell(null, [sg * 0.11, -0.1, 0], [0.12, 0.055, 0.028], { k: 0.02 })], this.mat(P, '#ffffff'), { h: 0.011 }).scale.setScalar(1.6);
       }
     } else if (back === 2) {
       // capa até o joelho: 3 colunas de ossos com mola, uma malha só
@@ -894,11 +894,11 @@ export class Character {
       this.skinned(P, 'cape' + D.key, prims, this.mat(P, 'acc'), { h: 0.013, extra, fall: 0.05 });
     } else if (back === 3) {
       const prims = [], extra = [];
-      let b = this.pbone(P, j.hips, [0, -0.01, -D.pd + 0.01], [-1.9, 0, 0], { len: 0.12, stiff: 20, gravity: 0, maxAngle: 0.5, wind: 0.6 });
+      let b = this.pbone(P, j.hips, [0, -0.06, -D.pd - 0.02], [1.75, 0, 0], { len: 0.12, stiff: 20, gravity: 0, maxAngle: 0.5, wind: 0.6 });
       for (let i = 0; i < 5; i++) {
         extra.push(b);
-        prims.push(cap(b, [0, 0, 0], [0, -0.12, 0], 0.036, i === 4 ? 0.032 : 0.036, { k: 0.02, fall: 0.04 }));
-        if (i < 4) b = this.pbone(P, b, [0, -0.12, 0], [-0.4, 0, 0], { len: 0.12, stiff: 14 - i * 1.5, gravity: 0, maxAngle: 0.7, wind: 1 });
+        prims.push(cap(b, [0, 0, 0], [0, -0.12, 0], 0.05, i === 4 ? 0.045 : 0.05, { k: 0.02, fall: 0.04 }));
+        if (i < 4) b = this.pbone(P, b, [0, -0.12, 0], [0.35, 0, 0], { len: 0.12, stiff: 14 - i * 1.5, gravity: 0, maxAngle: 0.7, wind: 1 });
       }
       this.skinned(P, 'tail' + D.key, prims, this.mat(P, 'hair'), { h: 0.009, extra });
     } else if (back === 4) {
