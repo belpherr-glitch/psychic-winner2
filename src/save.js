@@ -23,9 +23,9 @@ export function writeSave(data) {
 const SKEY = 'valebrisa.settings';
 export function loadSettings() {
   try {
-    return { quality: 1, ...JSON.parse(localStorage.getItem(SKEY) || '{}') };
+    return { quality: 1, zoom: 1, ...JSON.parse(localStorage.getItem(SKEY) || '{}') };
   } catch {
-    return { quality: 1 };
+    return { quality: 1, zoom: 1 };
   }
 }
 export function writeSettings(s) {

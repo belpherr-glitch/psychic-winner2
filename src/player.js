@@ -16,6 +16,7 @@ export class Player {
     this.vel = new THREE.Vector2();
     this.heading = 0;
     this.speed = 0;
+    this.lean = new THREE.Vector2();
 
     this.puffs = [];
     const geo = new THREE.BoxGeometry(0.16, 0.16, 0.16);
@@ -48,8 +49,17 @@ export class Player {
     if (mv.m > 0) {
       const want = Math.atan2(dx, dz);
       let diff = ((want - this.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-      this.heading += diff * (1 - Math.exp(-dt * 12));
-    }
+      const turn = diff * (1 - Math.exp(-dt * 12));
+      this.heading += turn;
+      this.turnRate = turn / Math.max(dt, 1e-4);
+    } else this.turnRate = 0;
+    // deita o corpo nas curvas e inclina de leve ao acelerar/frear
+    const fwd = (this.vel.x * Math.sin(this.heading) + this.vel.y * Math.cos(this.heading));
+    const accel = (target - fwd) * 0.035;
+    const kl = 1 - Math.exp(-dt * 8);
+    this.lean.x += (THREE.MathUtils.clamp(accel, -0.12, 0.14) - this.lean.x) * kl;
+    this.lean.y += (THREE.MathUtils.clamp(-this.turnRate * 0.035 * (this.speed / RUN_SPEED), -0.25, 0.25) - this.lean.y) * kl;
+    this.char.setLean(this.lean.x, this.lean.y);
     this.group.rotation.y = this.heading;
 
     this.pos.x += this.vel.x * dt;

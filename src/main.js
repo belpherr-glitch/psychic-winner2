@@ -7,15 +7,15 @@ import { buildWorld } from './world.js';
 import { Player } from './player.js';
 import { Input } from './input.js';
 import { UI } from './ui.js';
-import { defaultConfig, randomConfig } from './character.js';
+import { defaultConfig, randomConfig, sanitizeConfig } from './character.js';
 import { loadSave, writeSave, loadSettings, writeSettings } from './save.js';
 
 // ---------- renderizador ----------
-// O jogo renderiza numa resolução interna baixa e amplia sem filtro: visual pixel art e bem leve.
-const QUALITY = [{ name: 'Leve', h: 360, shadow: 1024 }, { name: 'Normal', h: 480, shadow: 1024 }, { name: 'Fino', h: 720, shadow: 2048 }];
+// Imagem limpa com anti-aliasing; a resolução interna é limitada pela opção de gráficos (leve no celular).
+const QUALITY = [{ name: 'Leve', h: 540, shadow: 1024 }, { name: 'Normal', h: 810, shadow: 2048 }, { name: 'Fino', h: 1080, shadow: 2048 }];
 const settings = loadSettings();
 const canvas = document.getElementById('game');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 const scene = new THREE.Scene();
@@ -74,12 +74,14 @@ addEventListener('resize', applyQuality);
 // ---------- mundo e jogador ----------
 const world = buildWorld(scene);
 let save = loadSave();
-let cfg = save?.char ? { ...defaultConfig(), ...save.char } : defaultConfig();
+if (save) save.char = sanitizeConfig(save.char);
+let cfg = save ? { ...save.char } : defaultConfig();
 const player = new Player(scene, cfg, world);
 const input = new Input(document.getElementById('touch'), document.getElementById('stick'));
 
 // ---------- câmera ----------
-const cam = { yaw: 0, pitch: 0.7, dist: 13.5 };
+const ZOOM = [{ name: 'Perto', d: 13 }, { name: 'Média', d: 17 }, { name: 'Longe', d: 22 }];
+const cam = { yaw: 0, pitch: 0.62, dist: (ZOOM[settings.zoom] || ZOOM[1]).d };
 const camPos = new THREE.Vector3(0, 16, 36), camLook = new THREE.Vector3(0, 1, -4);
 const wantPos = new THREE.Vector3(), wantLook = new THREE.Vector3();
 let menuAngle = 0.35;
@@ -97,6 +99,7 @@ function placePlayerFromSave() {
     cam.yaw = 0;
   }
   player.vel.set(0, 0);
+  player.char.resetSprings();
 }
 function persist() {
   if (state !== 'play' && state !== 'pause') return;
@@ -106,8 +109,7 @@ function persist() {
 
 const ui = new UI({
   newGame() {
-    cfg = randomConfig('');
-    cfg.hat = 0;
+    cfg = defaultConfig();
     editing = false;
     openCreator();
   },
@@ -157,6 +159,12 @@ const ui = new UI({
     applyQuality();
     ui.setQualityLabel(QUALITY[settings.quality].name);
   },
+  zoom(d) {
+    settings.zoom = (settings.zoom + d + ZOOM.length) % ZOOM.length;
+    writeSettings(settings);
+    cam.dist = ZOOM[settings.zoom].d;
+    ui.setZoomLabel(ZOOM[settings.zoom].name);
+  },
 });
 
 function toMenu() {
@@ -172,6 +180,7 @@ function openCreator() {
   player.group.visible = true;
   player.vel.set(0, 0);
   if (!editing) player.pos.copy(world.spawn);
+  player.char.resetSprings();
   player.face(editing ? cam.yaw : 0);
   if (!editing) cam.yaw = 0;
   player.char.setConfig(cfg);
@@ -189,6 +198,7 @@ function startPlay() {
 }
 
 ui.setQualityLabel(QUALITY[settings.quality]?.name || 'Normal');
+ui.setZoomLabel((ZOOM[settings.zoom] || ZOOM[1]).name);
 applyQuality();
 toMenu();
 
@@ -218,10 +228,10 @@ function frame() {
     player.face(player.heading + look.x * 0.012);
     player.update(dt, NO_MOVE, 0);
     // personagem fica na metade esquerda da tela; o painel ocupa a direita
-    const d = 5.4, halfW = d * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
+    const d = 4.3, halfW = d * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
     const sx = Math.cos(cam.yaw), sz = -Math.sin(cam.yaw), shift = halfW * 0.46;
-    wantLook.set(player.pos.x + sx * shift, 0.84, player.pos.z + sz * shift);
-    wantPos.set(wantLook.x + Math.sin(cam.yaw) * d, 1.2, wantLook.z + Math.cos(cam.yaw) * d);
+    wantLook.set(player.pos.x + sx * shift, 0.72, player.pos.z + sz * shift);
+    wantPos.set(wantLook.x + Math.sin(cam.yaw) * d, 1.05, wantLook.z + Math.cos(cam.yaw) * d);
     aimSun(player.pos, 14);
     snap = 5;
   } else {
@@ -231,9 +241,9 @@ function frame() {
       if (saveTimer > 5) { saveTimer = 0; persist(); }
     }
     const cp = Math.cos(cam.pitch);
-    wantLook.set(player.pos.x, 0.9, player.pos.z);
+    wantLook.set(player.pos.x, 0.8, player.pos.z);
     wantPos.set(wantLook.x + Math.sin(cam.yaw) * cp * cam.dist, wantLook.y + Math.sin(cam.pitch) * cam.dist, wantLook.z + Math.cos(cam.yaw) * cp * cam.dist);
-    aimSun(player.pos, 20);
+    aimSun(player.pos, 26);
     snap = 7;
   }
 

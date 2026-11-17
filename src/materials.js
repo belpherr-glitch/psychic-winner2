@@ -4,18 +4,19 @@ import * as THREE from 'three';
 
 export const windTime = { value: 0 };
 
-let _grad;
-function gradient() {
-  if (_grad) return _grad;
-  // 4 faixas: sombra, sombra, meio-tom, luz
-  _grad = new THREE.DataTexture(new Uint8Array([118, 118, 196, 255]), 4, 1, THREE.RedFormat);
-  _grad.minFilter = _grad.magFilter = THREE.NearestFilter;
-  _grad.needsUpdate = true;
-  return _grad;
+const _grads = {};
+// 4 faixas: sombra, sombra, meio-tom, luz. "soft" = sombra bem leve (pele e rosto de anime)
+function gradient(soft) {
+  const key = soft ? 'soft' : 'hard';
+  if (_grads[key]) return _grads[key];
+  const g = new THREE.DataTexture(new Uint8Array(soft ? [205, 205, 238, 255] : [118, 118, 196, 255]), 4, 1, THREE.RedFormat);
+  g.minFilter = g.magFilter = THREE.NearestFilter;
+  g.needsUpdate = true;
+  return (_grads[key] = g);
 }
 
-export function cozyMat({ color = 0xffffff, map = null, wind = 0, rim = 0.28, alphaTest = 0, side = THREE.FrontSide } = {}) {
-  const m = new THREE.MeshToonMaterial({ color, map, gradientMap: gradient(), alphaTest, side });
+export function cozyMat({ color = 0xffffff, map = null, wind = 0, rim = 0.28, alphaTest = 0, side = THREE.FrontSide, soft = false, transparent = false, frontBack = false } = {}) {
+  const m = new THREE.MeshToonMaterial({ color, map, gradientMap: gradient(soft), alphaTest, side, transparent, depthWrite: !transparent });
   const W = wind.toFixed(4), R = rim.toFixed(4);
   m.onBeforeCompile = (sh) => {
     if (wind > 0) {
@@ -34,6 +35,14 @@ export function cozyMat({ color = 0xffffff, map = null, wind = 0, rim = 0.28, al
         transformed.z += sway * ${W} * 0.5 * swayH;`
       );
     }
+    if (frontBack) {
+      // textura dividida em duas metades: esquerda = frente do modelo, direita = costas
+      sh.vertexShader = 'varying float vRestZ;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vRestZ = position.z;');
+      sh.fragmentShader = 'varying float vRestZ;\n' + sh.fragmentShader.replace(
+        '#include <map_fragment>',
+        'diffuseColor *= texture2D(map, vec2(vMapUv.x * 0.5 + (vRestZ < 0.0 ? 0.5 : 0.0), vMapUv.y));'
+      );
+    }
     if (rim > 0) {
       sh.fragmentShader = sh.fragmentShader.replace(
         '#include <opaque_fragment>',
@@ -43,7 +52,7 @@ export function cozyMat({ color = 0xffffff, map = null, wind = 0, rim = 0.28, al
       );
     }
   };
-  m.customProgramCacheKey = () => `cozy_${W}_${R}`;
+  m.customProgramCacheKey = () => `cozy_${W}_${R}_${frontBack}`;
   return m;
 }
 

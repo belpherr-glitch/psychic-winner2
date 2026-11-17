@@ -26,6 +26,7 @@ await p.waitForTimeout(3000);
 await p.screenshot({ path: `${out}/4-play-idle.png` });
 await p.keyboard.down('KeyS'); await p.keyboard.down('KeyD');
 await p.waitForTimeout(1500);
+await p.screenshot({ path: `${out}/5-run-zoom.png`, clip: { x: 272, y: 45, width: 300, height: 300 } });
 await p.screenshot({ path: `${out}/5-run.png` });
 await p.waitForTimeout(2500);
 await p.keyboard.up('KeyS'); await p.keyboard.up('KeyD');

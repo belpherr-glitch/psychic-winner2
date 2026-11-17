@@ -25,14 +25,15 @@ export function shade(c, amt) {
   return '#' + col.getHexString();
 }
 
-export function canvasTex(w, h, draw, { repeat = false, mip = false } = {}) {
+export function canvasTex(w, h, draw, { repeat = false, mip = false, smooth = false } = {}) {
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
   const ctx = c.getContext('2d');
   draw(ctx, w, h);
   const t = new THREE.CanvasTexture(c);
-  t.magFilter = THREE.NearestFilter;
+  t.magFilter = smooth ? THREE.LinearFilter : THREE.NearestFilter;
+  if (smooth) mip = true;
   t.minFilter = mip ? THREE.LinearMipmapLinearFilter : THREE.NearestFilter;
   t.generateMipmaps = mip;
   t.colorSpace = THREE.SRGBColorSpace;

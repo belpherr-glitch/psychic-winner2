@@ -6,11 +6,16 @@ const SCHEMA = [
   { key: 'skin', label: 'Pele', type: 'swatch' },
   { key: 'hair', label: 'Cabelo', type: 'cycle' },
   { key: 'hairColor', label: 'Cor', type: 'swatch' },
-  { key: 'eyeColor', label: 'Olhos', type: 'swatch' },
+  { key: 'eyes', label: 'Olhos', type: 'cycle' },
+  { key: 'eyeColor', label: 'Cor', type: 'swatch' },
+  { key: 'mouth', label: 'Boca', type: 'cycle' },
   { key: 'outfit', label: 'Roupa', type: 'cycle' },
-  { key: 'shirtColor', label: 'Camisa', type: 'swatch' },
-  { key: 'pantsColor', label: 'Calça', type: 'swatch' },
-  { key: 'hat', label: 'Chapéu', type: 'cycle' },
+  { key: 'shirtColor', label: 'Cor 1', type: 'swatch' },
+  { key: 'pantsColor', label: 'Cor 2', type: 'swatch' },
+  { key: 'hat', label: 'Cabeça', type: 'cycle' },
+  { key: 'ears', label: 'Orelhas', type: 'cycle' },
+  { key: 'back', label: 'Costas', type: 'cycle' },
+  { key: 'accent', label: 'Detalhe', type: 'swatch' },
 ];
 
 export class UI {
@@ -28,6 +33,8 @@ export class UI {
     $('btn-quit').onclick = () => handlers.quit();
     $('q-prev').onclick = () => handlers.quality(-1);
     $('q-next').onclick = () => handlers.quality(1);
+    $('z-prev').onclick = () => handlers.zoom(-1);
+    $('z-next').onclick = () => handlers.zoom(1);
     $('loading').remove();
   }
 
@@ -43,6 +50,9 @@ export class UI {
   }
   setQualityLabel(t) {
     $('q-label').textContent = t;
+  }
+  setZoomLabel(t) {
+    $('z-label').textContent = t;
   }
 
   // monta as linhas do criador a partir da config atual
