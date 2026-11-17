@@ -10,13 +10,13 @@ const errs = [];
 p.on('pageerror', (e) => errs.push(e.message));
 await p.goto('http://localhost:5173/studio/');
 await p.waitForFunction(() => window.__ready, null, { timeout: 60000 });
-const base = { hairColor: 3, eyeColor: 1, shirtColor: 8, pantsColor: 0, accent: 0 };
-const looks = [];
+const base = { hair: 1, hairColor: 11, eyeColor: 7, outfit: 4, shirtColor: 3, pantsColor: 2, accent: 2, hat: 0, ears: 0, back: 0, mouth: 2 };
+const looks = [{}];
 for (let h = 0; h < 7; h++) looks.push({ hair: h, hairColor: [3, 1, 0, 6, 5, 9, 10][h] });
-for (let o = 0; o < 4; o++) looks.push({ outfit: o, shirtColor: [8, 0, 5, 3][o], pantsColor: [0, 0, 1, 6][o], hair: 2 });
+for (let o = 0; o < 5; o++) looks.push({ outfit: o, shirtColor: [8, 0, 5, 3, 3][o], pantsColor: [0, 0, 1, 6, 2][o], hair: 2 });
 for (let t = 1; t < 6; t++) looks.push({ hat: t, hair: 2, accent: [0, 1, 5, 2, 3][t - 1] });
-for (let e = 1; e < 6; e++) looks.push({ ears: e, hair: 2, hairColor: 0 });
-for (let k = 1; k < 5; k++) looks.push({ back: k, hair: 2, accent: [7, 0, 1, 4][k - 1] });
+for (let e = 1; e < 7; e++) looks.push({ ears: e, hair: 2, hairColor: 0 });
+for (let k = 1; k < 6; k++) looks.push({ back: k, hair: 2, accent: [7, 0, 1, 4, 2][k - 1] });
 for (const [h, t, hp, c] of [[0, 0, 0, 0], [2, 2, 2, 2], [1, 1, 1, 0]]) looks.push({ height: h, thighs: t, hips: hp, chest: c, hair: 2 });
 const files = [];
 for (let i = 0; i < looks.length; i++) {

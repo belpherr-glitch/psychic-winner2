@@ -11,8 +11,8 @@ import { ell, cap, box, plane, prepare, sculpt, boundsOf, fieldOf, raycast } fro
 
 export const OPTIONS = {
   skin: ['#ffe9d6', '#fcd9bb', '#f0be94', '#d39a6c', '#a56f47', '#7a4c30'],
-  hairColor: ['#3d2c33', '#6b4226', '#a8642e', '#f0c05a', '#f8ecc0', '#d8584a', '#f5a3c4', '#86a4ea', '#8fd6a6', '#bda3ee', '#f3f2f7'],
-  eyeColor: ['#7a4a2c', '#3f8fe0', '#3fae6c', '#9a66e0', '#eb8f2e', '#e8506e', '#eabb22'],
+  hairColor: ['#3d2c33', '#6b4226', '#a8642e', '#f0c05a', '#f8ecc0', '#d8584a', '#f5a3c4', '#86a4ea', '#8fd6a6', '#bda3ee', '#f3f2f7', '#cfae86'],
+  eyeColor: ['#7a4a2c', '#3f8fe0', '#3fae6c', '#9a66e0', '#eb8f2e', '#e8506e', '#eabb22', '#8cc8ea'],
   shirtColor: ['#fffaf0', '#ee6a62', '#f6a843', '#f8dc62', '#78c873', '#60c0d2', '#6688e0', '#b080de', '#f598bc', '#4f4960'],
   pantsColor: ['#5677c0', '#3f4d6c', '#80603f', '#62985e', '#bd5a52', '#9176c0', '#e8dab4', '#f7f4ea'],
   accent: ['#ee6a62', '#f598bc', '#f8dc62', '#78c873', '#60c0d2', '#6688e0', '#b080de', '#fffaf0', '#4f4960'],
@@ -23,14 +23,15 @@ export const OPTIONS = {
   hair: ['Chiquinhas', 'Longo', 'Curto', 'Rabo de cavalo', 'Espetado', 'Coquinhos', 'Fofinho'],
   eyes: ['Redondo', 'Gatinho', 'Sonolento'],
   mouth: ['Sorriso', 'Gatinho', 'Alegre'],
-  outfit: ['Vestido', 'Macacão', 'Moletom', 'Camiseta'],
+  outfit: ['Vestido', 'Macacão', 'Moletom', 'Camiseta', 'Abelhinha'],
   hat: ['Nenhum', 'Boina', 'Chapéu de sol', 'Laço', 'Coroinha', 'Sapinho'],
-  ears: ['Nenhum', 'Gatinho', 'Coelho', 'Chifres', 'Unicórnio', 'Elfo'],
-  back: ['Nenhum', 'Asinhas', 'Capa', 'Rabo de gato', 'Mochila'],
+  ears: ['Nenhum', 'Gatinho', 'Coelho', 'Chifres', 'Unicórnio', 'Elfo', 'Cachorro'],
+  back: ['Nenhum', 'Asinhas', 'Capa', 'Rabo de gato', 'Mochila', 'Rabo de cachorro'],
 };
 
 export function defaultConfig() {
-  return { name: '', skin: 0, height: 1, thighs: 1, hips: 1, chest: 0, hair: 0, hairColor: 3, eyeColor: 1, eyes: 0, mouth: 0, outfit: 0, shirtColor: 8, pantsColor: 0, accent: 0, hat: 0, ears: 0, back: 0 };
+  // padrão = a garota cachorro da referência
+  return { name: '', skin: 0, height: 1, thighs: 1, hips: 1, chest: 0, hair: 1, hairColor: 11, eyeColor: 7, eyes: 0, mouth: 2, outfit: 4, shirtColor: 3, pantsColor: 2, accent: 2, hat: 3, ears: 6, back: 5 };
 }
 // garante que uma config (ex.: de um save antigo) só tem índices válidos
 export function sanitizeConfig(c) {
@@ -60,31 +61,35 @@ const SCALE = 0.62; // unidades do modelo -> mundo
 // Proporção chibi de anime: 2,3 a 3 cabeças de altura, com tronco, cintura, quadril, pernas e braços de verdade.
 // Altura, coxas, quadril e peito vêm do criador de personagem.
 export function bodyDims(cfg) {
-  const H = [{ L: 0.64, sh: 0.58, neck: 0 }, { L: 0.8, sh: 0.66, neck: 0 }, { L: 0.98, sh: 0.74, neck: 0 }][cfg.height];
-  const th = [0.14, 0.16, 0.185][cfg.thighs];
-  const pw0 = [0.3, 0.33, 0.37][cfg.hips], hx = th + 0.02, pw = Math.max(pw0, hx + th * 0.95);
+  // Medidas tiradas da referência (régua: cabeça do topo do cabelo ao queixo = 0.8):
+  // cabeça 37% da altura, tronco (queixo->virilha) 30%, pernas 33%; pernas encostadas e quase sem afinar.
+  const H = [{ L: 0.64, sh: 0.41, neck: 0 }, { L: 0.76, sh: 0.47, neck: 0 }, { L: 0.9, sh: 0.54, neck: 0 }][cfg.height];
+  const th = [0.12, 0.14, 0.16][cfg.thighs];
+  const pw0 = [0.25, 0.28, 0.31][cfg.hips], hx = th + 0.006, pw = Math.max(pw0, hx + th * 0.95);
+  const k = H.sh / 0.47;
   const D = {
-    ...H, chest: cfg.chest, cw: 0.245, cd: 0.17, ww: 0, wd: 0, pw, pd: 0.2 + (pw - 0.33) * 0.4, hx,
-    th: [th, th * 0.85], sn: [th * 0.8, th * 0.62], ar: [0.062, 0.054], fr: [0.054, 0.048], hand: 0.06, foot: [0.08, 0.06, 0.11],
+    ...H, chest: cfg.chest, cw: 0.2, cd: 0.16, pw, pd: 0.19 + (pw - 0.28) * 0.4, hx,
+    th: [th, th * 0.92], sn: [th * 0.88, th * 0.78], ar: [0.06, 0.052], fr: [0.05, 0.045], hand: 0.058, foot: [th * 0.82, 0.055, 0.12],
   };
-  D.a = (D.L - 0.12) / 2; // coxa e canela (o pé ocupa os últimos 0.12) // coxa e canela
-  D.ua = D.sh * 0.42; D.fa = D.sh * 0.36; // braço e antebraço
-  D.chestY = D.sh * 0.62; D.ch = D.sh * 0.36; D.shX = D.cw * 0.8;
+  D.a = (D.L - 0.12) / 2; // coxa e canela (o pé ocupa os últimos 0.12)
+  D.ua = 0.24 * k; D.fa = 0.2 * k; // braço e antebraço
+  D.chestY = D.sh * 0.62; D.ch = D.sh * 0.36; D.shX = D.cw * 0.85;
   D.waistY = D.L + 0.1; D.shY = D.waistY + D.sh; D.kneeY = D.L - 0.02 - D.a;
   D.hemY = D.kneeY + 0.06; D.skirt = D.L + 0.07 - D.hemY;
-  D.cadence = Math.sqrt(D.L / 0.8); // perna maior = passo mais lento
-  D.skel = `${cfg.height}_${cfg.hips}`; // o que muda o esqueleto
+  D.shortSkirt = 0.14; // saia curtinha (abelhinha): termina na virilha
+  D.cadence = Math.sqrt(D.L / 0.76); // perna maior = passo mais lento
+  D.skel = `${cfg.height}_${cfg.hips}_${cfg.thighs}`; // o que muda o esqueleto
   D.key = `${cfg.height}${cfg.thighs}${cfg.hips}${cfg.chest}`; // o que muda a escultura do corpo
   return D;
 }
 
 
 // ---------- cabeça (espaço local do osso da cabeça) ----------
-const HC = [0, 0.35, 0], HR = [0.47, 0.37, 0.42];
+const HC = [0, 0.35, 0], HR = [0.5, 0.37, 0.42];
 const headPrims = () => prepare([
   ell(null, HC, HR),
-  ell(null, [0.15, 0.17, 0.07], [0.27, 0.21, 0.27], { k: 0.12 }),
-  ell(null, [-0.15, 0.17, 0.07], [0.27, 0.21, 0.27], { k: 0.12 }),
+  ell(null, [0.17, 0.15, 0.07], [0.3, 0.2, 0.27], { k: 0.12 }),
+  ell(null, [-0.17, 0.15, 0.07], [0.3, 0.2, 0.27], { k: 0.12 }),
 ]);
 // ponto sobre o "elipsoide" da cabeça: az = ângulo a partir da frente, el = elevação, off = afastamento
 const HP = (az, el, off = 0) => [HC[0] + Math.sin(az) * Math.cos(el) * HR[0] * (1 + off), HC[1] + Math.sin(el) * HR[1] * (1 + off), HC[2] + Math.cos(az) * Math.cos(el) * HR[2] * (1 + off)];
@@ -98,7 +103,7 @@ function faceTex(cfg, mode) {
   return canvasTex(256, 208, (ctx) => {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    const cy = 137, rx = 34, ry = 39;
+    const cy = 92, rx = 18, ry = 26;
     const eyeShape = (cx) => {
       // olho arredondado, topo um pouco reto (cara de anime)
       ctx.beginPath();
@@ -109,12 +114,12 @@ function faceTex(cfg, mode) {
       ctx.closePath();
     };
     for (const sg of [-1, 1]) {
-      const cx = 128 + sg * 60;
+      const cx = 128 + sg * 34;
       // bochecha larga e macia
-      const bx = cx + sg * 10, by = cy + ry + 6;
+      const bx = 128 + sg * 60, by = 130;
       const g = ctx.createRadialGradient(bx, by, 2, bx, by, 34);
       g.addColorStop(0, 'rgba(255,120,140,0.62)'); g.addColorStop(0.6, 'rgba(255,130,150,0.42)'); g.addColorStop(1, 'rgba(255,135,155,0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(bx, by, 34, 24, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(bx, by, 24, 21, 0, 0, TAU); ctx.fill();
 
       ctx.strokeStyle = lash;
       if (mode === 'closed') {
@@ -167,7 +172,7 @@ function faceTex(cfg, mode) {
       ctx.beginPath(); ctx.arc(cx + 2, hy - 5, 2.2, 0, TAU); ctx.fill();
     }
     // boca pequena, perto do queixo
-    const my = cy + ry + 8;
+    const my = 140;
     ctx.strokeStyle = '#7d2f3c'; ctx.lineWidth = 3.5;
     if (mode === 'happy' || cfg.mouth === 2) {
       // aberta: "D" com linguinha
@@ -204,7 +209,26 @@ function outfitTex(cfg, D) {
       const dot = (x, y, r, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(X(x), Y(y), U(r), 0, TAU); ctx.fill(); };
       const line = (pts, wd, c) => { ctx.strokeStyle = c; ctx.lineWidth = U(wd); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])))); ctx.stroke(); };
       R(-TX, 0, TX, TY, shirt);
-      if (o === 0) {
+      if (o === 4) {
+        // meia-calça listrada até a coxa, com babadinho em cima
+        R(-TX, 0, TX, TY, '#fffaf0');
+        const sockTop = D.L - 0.06, band = 0.055;
+        for (let y = shoe, k = 0; y < sockTop; y += band, k++) R(-0.6, y, 0.6, Math.min(y + band, sockTop), k % 2 ? acc : pants);
+        R(-0.6, sockTop - 0.03, 0.6, sockTop, pants);
+        // saia branca com barra
+        R(-0.7, sockTop, 0.7, w, '#ffffff');
+        R(-0.7, sockTop, 0.7, sockTop + 0.02, shade('#ffffff', -0.08));
+        // avental: peito e barriga amarelos com listras marrons
+        const cw2 = D.cw;
+        R(-cw2 * 0.95, w - 0.05, cw2 * 0.95, ch + 0.06, shirt);
+        R(-cw2 * 0.95, w - 0.01, cw2 * 0.95, w + 0.03, pants);
+        R(-cw2 * 0.95, w + 0.08, cw2 * 0.95, w + 0.12, pants);
+        if (front) {
+          line([[-cw2 * 0.45, ch + 0.05], [-cw2 * 0.55, sh + 0.04]], 0.04, shirt); line([[cw2 * 0.45, ch + 0.05], [cw2 * 0.55, sh + 0.04]], 0.04, shirt);
+          dot(0, sh - 0.03, 0.03, acc); dot(-0.045, sh - 0.025, 0.028, acc); dot(0.045, sh - 0.025, 0.028, acc);
+          dot(0, sh - 0.075, 0.022, '#e0b23c');
+        }
+      } else if (o === 0) {
         // vestido: meias, barra, faixa na cintura, gola e botões
         R(-0.6, shoe, 0.6, D.hemY, '#ffffff');
         R(-0.7, D.hemY, 0.7, D.hemY + 0.035, '#ffffff');
@@ -296,21 +320,19 @@ function keys(t, k) {
 function idlePose(t, cycles = 1) {
   const s = (ph = 0, f = 1) => Math.sin(TAU * t * cycles * f + ph);
   return {
-    hipsY: 0.005 * s() - 0.01,
-    squash: 1 + 0.02 * s(),
-    hips: [0, 0.06, 0.045 + 0.015 * s(0, 0.5)],
-    torso: [0.03 + 0.02 * s(0.8), -0.04, -0.06 - 0.015 * s(0, 0.5)],
-    head: [0.04 + 0.03 * s(-0.9), 0.05, 0.1 + 0.04 * s(0.6, 0.5)],
-    // mãos juntas na frente da barriga
-    armL: [-0.38 + 0.03 * s(0.5), 0.15, 0.14],
-    armR: [-0.38 + 0.03 * s(1.1), -0.15, -0.14],
-    foreArmL: [-1.05 - 0.04 * s(), 0.0, -0.75],
-    foreArmR: [-1.05 - 0.04 * s(), 0.0, 0.75],
-    // peso na perna esquerda, direita relaxada com o joelho dobradinho
-    legL: [0.0, 0, 0.0],
-    legR: [-0.16, 0, -0.07],
-    shinL: [0.02, 0, 0],
-    shinR: [0.3, 0, 0],
+    hipsY: 0.005 * s(),
+    squash: 1 + 0.018 * s(),
+    hips: [0, 0, 0.02 * s(0, 0.5)],
+    torso: [0.02 * s(0.8), 0.04, 0.05],
+    head: [0.03 * s(-0.9), 0.08, -0.08 + 0.04 * s(0.6, 0.5)],
+    // braço direito dela levantado, acenando
+    armR: [-0.3, 0.6, -1.45 + 0.04 * s(0.4)],
+    foreArmR: [-0.2, 0, -1.15 + 0.28 * s(0, 3)],
+    // braço esquerdo aberto pra baixo, cotovelo de leve
+    armL: [-0.3 + 0.03 * s(0.5), -0.4, 0.55 + 0.04 * s(-0.4)],
+    foreArmL: [-0.5, 0, 0.2],
+    legL: [0, 0, 0.01],
+    legR: [0, 0, -0.01],
   };
 }
 
@@ -390,7 +412,7 @@ function clips(D) {
   }
   return clipCache.get(key);
 }
-const FIDGETS = ['look', 'cheer', 'wave'];
+const FIDGETS = ['look', 'cheer'];
 
 // ---------- contorno estilo anime (casca invertida) ----------
 const outlineMat = new THREE.MeshBasicMaterial({ color: '#6b4545', side: THREE.BackSide });
@@ -620,9 +642,9 @@ export class Character {
     out.neck = cap(j.torso, [0, D.sh - 0.06, 0], [0, D.sh + 0.04, 0], 0.08, 0.075, { k: 0.06 });
     for (const s of ['L', 'R']) {
       out['shoulder' + s] = ell(j['arm' + s], [0, -0.01, 0], [D.ar[0] * 1.2, D.ar[0] * 1.2, D.ar[0] * 1.15], { k: 0.06 });
-      out['thigh' + s] = cap(j['leg' + s], [0, 0.02, 0], [0, -D.a, 0], D.th[0], D.th[1], { k: 0.025 });
-      out['shin' + s] = cap(j['shin' + s], [0, 0, 0], [0, -D.a, 0], D.sn[0], D.sn[1], { k: 0.04 });
-      out['foot' + s] = ell(j['shin' + s], [0, -D.a - 0.075, 0.03], D.foot, { k: 0.04 });
+      out['thigh' + s] = cap(j['leg' + s], [0, 0.02, 0], [0, -D.a, 0], D.th[0], D.th[1], { k: 0.012 });
+      out['shin' + s] = cap(j['shin' + s], [0, 0, 0], [0, -D.a, 0], D.sn[0], D.sn[1], { k: 0.03 });
+      out['foot' + s] = ell(j['shin' + s], [0, -D.a - 0.045, 0.03], D.foot, { k: 0.04 });
       out['arm' + s] = cap(j['arm' + s], [0, 0, 0], [0, -D.ua, 0], D.ar[0], D.ar[1], { k: 0.03 });
       out['fore' + s] = cap(j['foreArm' + s], [0, 0, 0], [0, -D.fa, 0], D.fr[0], D.fr[1], { k: 0.03 });
       out['hand' + s] = ell(j['foreArm' + s], [0, -D.fa - 0.035, 0], [D.hand, D.hand * 1.05, D.hand * 0.95], { k: 0.03 });
@@ -639,7 +661,7 @@ export class Character {
     this.piece(P, j.head, 'head', hp, this.mat(P, 'skin', { soft: true }), { h: 0.026 });
     const f = fieldOf(hp), O = [0, 0.3, 0], NU = 26, NV = 20, pos = [], uvs = [], nrm = [], idx = [];
     for (let v = 0; v <= NV; v++) for (let u = 0; u <= NU; u++) {
-      const az = -1.25 + 2.5 * (u / NU), el = 0.8 - 2.0 * (v / NV);
+      const az = -1.25 + 2.5 * (u / NU), el = 0.8 - 2.25 * (v / NV);
       const d = [Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)];
       const t = raycast(f, O, d, 1.2);
       const x = O[0] + d[0] * t, y = O[1] + d[1] * t, z = O[2] + d[2] * t, e = 0.004;
@@ -665,7 +687,13 @@ export class Character {
     const inf = (p, t, more) => ({ ...p, infl: t, ...more });
     const torsoUp = (t) => [inf(b.waist, t), inf(b.chest, t), ...(b.bust ? [inf(b.bust, t)] : [])];
     const prims = [], extra = [];
-    if (o === 0) {
+    if (o === 4) {
+      const sk = this.pbone(P, j.hips, [0, 0.07, 0], [0, 0, 0], { len: D.shortSkirt, stiff: 34, drag: 0.35, gravity: 0, wind: 0.6, maxAngle: 0.22 });
+      extra.push(sk);
+      prims.push(cap(sk, [0, 0.01, 0], [0, -D.shortSkirt, 0], D.pw * 0.92, D.pw * 1.4, { k: 0.02, fall: 0.06 }), plane(sk, [0, -D.shortSkirt, 0], [0, -1, 0], { k: 0.012 }));
+      prims.push(...torsoUp(0.016), inf(b.pelvis, 0.01, { k: 0.05 }), ell(j.torso, [0, D.sh, 0.03], [D.cw * 0.55, 0.035, D.cd * 0.8], { k: 0.015 }));
+      for (const s of ['L', 'R']) prims.push(inf(b['shoulder' + s], 0.014), ell(j['arm' + s], [0, -0.06, 0], [D.ar[0] * 1.55, D.ar[0] * 1.6, D.ar[0] * 1.5], { k: 0.02 }), inf(b['thigh' + s], 0.008, { k: 0.01 }), inf(b['shin' + s], 0.008, { k: 0.01 }));
+    } else if (o === 0) {
       // vestido: saia rodada em osso com mola (balança como sino), mangas bufantes, meias
       const sk = this.pbone(P, j.hips, [0, 0.07, 0], [0, 0, 0], { len: D.skirt, stiff: 34, drag: 0.35, gravity: 0, wind: 0.5, maxAngle: 0.2 });
       extra.push(sk);
@@ -719,10 +747,10 @@ export class Character {
     const j = this.j, H = j.head, prims = [], extra = [];
     const hair = this.mat(P, 'hair', { soft: true });
     // calota: maior que a cabeça, puxada pra cima e pra trás; depois "recorta" o rosto
-    prims.push(ell(H, [0, 0.38, -0.04], [0.5, 0.39, 0.47]));
+    prims.push(ell(H, [0, 0.38, -0.04], [0.54, 0.39, 0.46]));
     if (style === 2 || style === 6) prims.push(ell(H, [0, 0.2, -0.16], [0.5, 0.26, 0.38], { k: 0.08 }));
     if (style === 4) prims.push(plane(H, [0, 0.08, 0], [0, -1, 0], { k: 0.05 }));
-    prims.push(ell(H, [0, 0.17, 0.44], [0.42, 0.34, 0.42], { op: 'sub', k: 0.035 }));
+    prims.push(ell(H, [0, 0.17, 0.44], [0.45, 0.34, 0.42], { op: 'sub', k: 0.035 }));
     // franja: mechas afiladas que descem pela testa (em 2 trechos pra acompanhar a curva)
     const bang = (az, tipAz, tipEl, r) => {
       const a = HP(az, 1.0, 0.05), m = HP((az + tipAz) / 2, (1.0 + tipEl) / 2 + 0.05, 0.085), e = HP(tipAz, tipEl, 0.075);
@@ -730,16 +758,16 @@ export class Character {
     };
     const spiky = style === 4;
     const fr = spiky ? 0.08 : 0;
-    bang(-1.0, -1.14, -0.45, 0.13); bang(-0.68, -0.78, -0.2 + fr, 0.13); bang(-0.34, -0.4, -0.1 + fr, 0.135); bang(0.0, -0.02, -0.13 + fr, 0.14);
-    bang(0.34, 0.4, -0.1 + fr, 0.135); bang(0.68, 0.78, -0.2 + fr, 0.13); bang(1.0, 1.14, -0.45, 0.13);
+    bang(-1.0, -1.14, -0.3, 0.13); bang(-0.68, -0.78, 0.06 + fr, 0.13); bang(-0.34, -0.4, 0.13 + fr, 0.135); bang(0.0, -0.02, 0.1 + fr, 0.14);
+    bang(0.34, 0.4, 0.13 + fr, 0.135); bang(0.68, 0.78, 0.06 + fr, 0.13); bang(1.0, 1.14, -0.3, 0.13);
     // mechas laterais soltas, na frente da orelha
     for (const sg of [1, -1]) {
       const long = style === 0 || style === 1;
       if (long) {
         // cortina lisa dos lados do rosto, descendo até o peito (como nas referências)
-        const a = HP(sg * 1.25, 0.55, 0.08), m = HP(sg * 1.25, -0.05, 0.14);
+        const a = HP(sg * 1.5, 0.55, 0.08), m = HP(sg * 1.55, -0.05, 0.14);
         prims.push(cap(H, a, m, 0.09, 0.095, { k: 0.06 }));
-        this.sheetChain(P, H, m, [0, sg * 0.6, sg * 0.08], [0.1, 0.1, 0.09, 0.07, 0.04], 0.05, 0.15, { stiff: 18, maxAngle: 0.5, wind: 0.9, gravity: 0.5 }, prims, extra);
+        this.sheetChain(P, H, m, [0, sg * 1.2, sg * 0.1], [0.1, 0.1, 0.09, 0.07, 0.04], 0.05, 0.15, { stiff: 18, maxAngle: 0.5, wind: 0.9, gravity: 0.5 }, prims, extra);
       } else {
         const a = HP(sg * 1.3, 0.5, 0.07), m = HP(sg * 1.27, -0.05, 0.1);
         prims.push(cap(H, a, m, 0.085, 0.075, { k: 0.03 }));
@@ -812,8 +840,8 @@ export class Character {
       this.ribbonTails(P, g, [0, 0.05, -0.36], 0.2);
     } else if (hat === 3) {
       // laço grande com pontas soltas
-      const g = this.piece(P, H, 'bow', [ell(null, [0.19, 0.02, 0], [0.2, 0.15, 0.07]), ell(null, [-0.19, 0.02, 0], [0.2, 0.15, 0.07]), ell(null, [0, 0, 0.01], [0.075, 0.085, 0.075], { k: 0.02 }), ell(null, [0.1, 0.02, 0], [0.05, 0.2, 0.2], { op: 'sub', k: 0.04 }), ell(null, [-0.1, 0.02, 0], [0.05, 0.2, 0.2], { op: 'sub', k: 0.04 }), ell(null, [0, 0, 0.01], [0.07, 0.08, 0.07], { k: 0.02 })], this.mat(P, 'acc'), { h: 0.012, p: [0, top + 0.03, -0.14], r: [-0.3, 0, 0] });
-      this.ribbonTails(P, g, [0, -0.03, -0.05], 0.17);
+      const g = this.piece(P, H, 'bow', [ell(null, [0.19, 0.02, 0], [0.2, 0.15, 0.07]), ell(null, [-0.19, 0.02, 0], [0.2, 0.15, 0.07]), ell(null, [0, 0, 0.01], [0.075, 0.085, 0.075], { k: 0.02 }), ell(null, [0.1, 0.02, 0], [0.05, 0.2, 0.2], { op: 'sub', k: 0.04 }), ell(null, [-0.1, 0.02, 0], [0.05, 0.2, 0.2], { op: 'sub', k: 0.04 }), ell(null, [0, 0, 0.01], [0.07, 0.08, 0.07], { k: 0.02 })], this.mat(P, 'acc'), { h: 0.012, p: [-0.08, top + 0.02, 0.12], r: [-0.5, 0, 0.12] });
+      g.scale.setScalar(0.72);
     } else if (hat === 4) {
       const gold = this.mat(P, '#f8d45c');
       const g = this.bit(P, H, new THREE.CylinderGeometry(0.15, 0.13, 0.09, 12, 1, true), this.mat(P, '#f8d45c', { side: THREE.DoubleSide }), [0.15, top - 0.02, 0.02], 1.5, [0.05, 0, -0.32]);
@@ -839,6 +867,18 @@ export class Character {
 
   buildEars(P, ears, lowHat) {
     const H = this.j.head;
+    if (ears === 6) {
+      // orelhas de cachorro caídas dos lados do alto da cabeça; balançam com o movimento
+      const prims = [], extra = [];
+      for (const sg of [1, -1]) {
+        this.sheetChain(P, H, HP(sg * 1.45, 0.95, 0.15), [0, 0, sg * 0.85], [0.14, 0.17, 0.15], 0.055, 0.14, { stiff: 16, maxAngle: 0.7, wind: 1.2, gravity: 0.6 }, prims, extra);
+      }
+      this.skinned(P, 'dogears', prims, this.mat(P, 'hair', { soft: true }), { h: 0.012, extra, fall: 0.05 });
+      // lacinho na orelha
+      const bow = this.piece(P, H, 'earbow', [ell(null, [0.07, 0, 0], [0.075, 0.055, 0.03]), ell(null, [-0.07, 0, 0], [0.075, 0.055, 0.03]), ell(null, [0, 0, 0.01], [0.03, 0.035, 0.03], { k: 0.015 })], this.mat(P, 'acc'), { h: 0.009, p: HP(-1.2, 0.95, 0.24), r: [0, -0.9, -0.3] });
+      void bow;
+      return;
+    }
     if (ears === 1) {
       for (const sg of [1, -1]) {
         const at = HP(sg * 0.75, lowHat ? 0.7 : 0.95, 0.1);
@@ -901,6 +941,11 @@ export class Character {
         if (i < 4) b = this.pbone(P, b, [0, -0.12, 0], [0.35, 0, 0], { len: 0.12, stiff: 14 - i * 1.5, gravity: 0, maxAngle: 0.7, wind: 1 });
       }
       this.skinned(P, 'tail' + D.key, prims, this.mat(P, 'hair'), { h: 0.009, extra });
+    } else if (back === 5) {
+      // rabo de cachorro: grosso e fofo, saindo pro lado e pra trás
+      const prims = [], extra = [];
+      this.lockChain(P, j.hips, [-0.06, -0.04, -D.pd + 0.03], [0.7, 0, -1.65], [0.06, 0.1, 0.13, 0.13, 0.1, 0.035], 0.11, { stiff: 24, gravity: 0, maxAngle: 0.45, wind: 1.2 }, prims, extra);
+      this.skinned(P, 'dogtail' + D.key, prims, this.mat(P, 'hair', { soft: true }), { h: 0.012, extra, fall: 0.05 });
     } else if (back === 4) {
       this.piece(P, j.torso, 'pack', [box(null, [0, 0, 0], [0.11, 0.12, 0.05], 0.05), box(null, [0, -0.05, -0.075], [0.07, 0.05, 0.015], 0.025, { k: 0.015 }), ell(null, [0, 0.13, 0.01], [0.12, 0.05, 0.08], { k: 0.03 })], this.mat(P, 'acc'), { h: 0.011, p: [0, D.chestY - 0.02, backZ - 0.07] });
       for (const sg of [1, -1]) this.bit(P, j.torso, new THREE.TorusGeometry(D.sh * 0.3, 0.016, 5, 16, Math.PI * 1.1), this.mat(P, 'accDark'), [sg * 0.075, D.chestY + 0.02, -0.01], [0.75, 1, 1.15], [0, Math.PI / 2, -0.3]);

@@ -18,7 +18,7 @@ scene.add(ch.group);
 
 window.studio = {
   // cfg: config do personagem; ang: giro (0 = de frente); top/bottom: faixa vertical enquadrada (mundo)
-  show(cfg, { ang = 0, pose = 'idle', t = 0.0, extra = 0 } = {}) {
+  show(cfg, { ang = 0, pose = 'idle', t = 0.0, extra = 0, tight = false } = {}) {
     ch.setConfig({ ...defaultConfig(), ...cfg });
     ch.group.rotation.y = ang;
     ch.fidget = null;
@@ -29,7 +29,9 @@ window.studio = {
     ch.mixer.update(0);
     // enquadra do pé ao topo da cabeça (altura vem das medidas do corpo)
     const D = ch.D, sc = ch.group.scale.y;
-    const top = (D.L + 0.1 + D.sh + 0.06 + D.neck + 0.8 + extra) * sc, pad = top * 0.03;
+    // tight: enquadra exatamente do pé ao topo do cabelo (pra decalcar sobre a referência)
+    const hairTop = D.L + 0.1 + D.sh + 0.06 + D.neck + 0.78;
+    const top = (tight ? hairTop : hairTop + 0.02 + extra) * sc, pad = top * 0.03;
     cam.top = top / 2 + pad; cam.bottom = -(top / 2 + pad);
     cam.left = -((top + 2 * pad) / 2) * (W / H); cam.right = -cam.left;
     cam.position.set(0, top / 2, 10);
