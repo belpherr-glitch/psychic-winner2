@@ -228,10 +228,10 @@ function frame() {
     player.face(player.heading + look.x * 0.012);
     player.update(dt, NO_MOVE, 0);
     // personagem fica na metade esquerda da tela; o painel ocupa a direita
-    const d = 4.3, halfW = d * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
+    const d = 4.9, halfW = d * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
     const sx = Math.cos(cam.yaw), sz = -Math.sin(cam.yaw), shift = halfW * 0.46;
-    wantLook.set(player.pos.x + sx * shift, 0.72, player.pos.z + sz * shift);
-    wantPos.set(wantLook.x + Math.sin(cam.yaw) * d, 1.05, wantLook.z + Math.cos(cam.yaw) * d);
+    wantLook.set(player.pos.x + sx * shift, 0.8, player.pos.z + sz * shift);
+    wantPos.set(wantLook.x + Math.sin(cam.yaw) * d, 1.2, wantLook.z + Math.cos(cam.yaw) * d);
     aimSun(player.pos, 14);
     snap = 5;
   } else {
@@ -241,7 +241,7 @@ function frame() {
       if (saveTimer > 5) { saveTimer = 0; persist(); }
     }
     const cp = Math.cos(cam.pitch);
-    wantLook.set(player.pos.x, 0.8, player.pos.z);
+    wantLook.set(player.pos.x, 0.85, player.pos.z);
     wantPos.set(wantLook.x + Math.sin(cam.yaw) * cp * cam.dist, wantLook.y + Math.sin(cam.pitch) * cam.dist, wantLook.z + Math.cos(cam.yaw) * cp * cam.dist);
     aimSun(player.pos, 26);
     snap = 7;

@@ -4,6 +4,10 @@ import { OPTIONS } from './character.js';
 const $ = (id) => document.getElementById(id);
 const SCHEMA = [
   { key: 'skin', label: 'Pele', type: 'swatch' },
+  { key: 'height', label: 'Altura', type: 'cycle' },
+  { key: 'thighs', label: 'Coxas', type: 'cycle' },
+  { key: 'hips', label: 'Quadril', type: 'cycle' },
+  { key: 'chest', label: 'Peito', type: 'cycle' },
   { key: 'hair', label: 'Cabelo', type: 'cycle' },
   { key: 'hairColor', label: 'Cor', type: 'swatch' },
   { key: 'eyes', label: 'Olhos', type: 'cycle' },
